@@ -476,6 +476,7 @@
       <li>Type a name and pick M/F/- (or leave blank), then click +.</li>
       <li><b>CSV upload format:</b> <code>Last, First, Gender(M/F)</code> — one student per line. A header row (like "Last Name, First Name, Gender") is detected and skipped automatically.</li>
       <li>Click the <b>(M)/(F)/(-)</b> badge on any unassigned student's chip to change their gender anytime.</li>
+      <li>Click a student's <b>name</b> (in the Unassigned list or in a seat) to rename them — renaming doesn't move or unseat them.</li>
     </ul>
 
     <h3>Building desks</h3>
@@ -886,6 +887,14 @@ function cycleGender(id){
   db.ref(`${ROOT}/rosters/${currentClassId}/${id}/gender`).set(next);
 }
 
+function renameStudent(id){
+  const current = (roster[id] && roster[id].name) || '';
+  const newName = prompt('New name for this student:', current);
+  if(!newName || !newName.trim() || newName.trim() === current) return;
+  db.ref(`${ROOT}/rosters/${currentClassId}/${id}/name`).set(newName.trim());
+  setStatus('Name updated');
+}
+
 function clearSeats(){
   if(!currentClassId) return;
   if(!confirm('Send all students back to Unassigned?')) return;
@@ -964,6 +973,11 @@ function render(){
 
       const label = document.createElement('span');
       label.textContent = studentId && roster[studentId] ? roster[studentId].name : 'Empty';
+      if(studentId){
+        label.style.cursor = 'pointer';
+        label.title = 'Click to rename this student';
+        label.onclick = (e)=>{ e.stopPropagation(); renameStudent(studentId); };
+      }
       seat.appendChild(label);
 
       if(studentId && !arrangeMode){
@@ -1026,6 +1040,9 @@ function render(){
     };
     const nameSpan = document.createElement('span');
     nameSpan.textContent = stu.name;
+    nameSpan.style.cursor = 'pointer';
+    nameSpan.title = 'Click to rename this student';
+    nameSpan.onclick = (e)=>{ e.stopPropagation(); renameStudent(id); };
     const genderBadge = document.createElement('span');
     genderBadge.textContent = stu.gender ? `(${stu.gender})` : '(-)';
     genderBadge.title = 'Click to set gender (used for alternating shuffle)';
