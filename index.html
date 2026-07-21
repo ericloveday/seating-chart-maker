@@ -400,6 +400,7 @@
     <select id="templateSelect"><option value="">-- choose template --</option></select>
     <button onclick="applyTemplate()">Apply</button>
     <button class="secondary" onclick="saveAsTemplate()">Save Current As...</button>
+    <button class="secondary" onclick="deleteTemplate()">Delete</button>
   </div>
 
   <div class="group">
@@ -498,7 +499,7 @@
     </ul>
 
     <h3>Saved Layouts (Rows / Groups / etc.)</h3>
-    <p>Build a layout once, then <b>Save Current As...</b> and name it (e.g. "Rows" or "Lab Tables"). Later, pick it from the Saved Layout dropdown and click <b>Apply</b> to drop that same layout into any of your 6 classes. Applying a layout clears current seating for that class.</p>
+    <p>Build a layout once, then <b>Save Current As...</b> and name it (e.g. "Rows" or "Lab Tables"). Later, pick it from the Saved Layout dropdown and click <b>Apply</b> to drop that same layout into any of your 6 classes. Applying a layout clears current seating for that class. Pick a layout and click <b>Delete</b> to remove it from the list permanently — this only deletes the saved template, not any class currently using that arrangement.</p>
 
     <h3>Seating students</h3>
     <ul>
@@ -752,6 +753,16 @@ function saveAsTemplate(){
   const id = slugId('tmpl');
   db.ref(`${ROOT}/layoutTemplates/${id}`).set({name, desks: layout});
   setStatus('Layout saved');
+}
+
+function deleteTemplate(){
+  const id = document.getElementById('templateSelect').value;
+  if(!id){ alert('Choose a saved layout to delete first.'); return; }
+  const tmpl = templates[id];
+  if(!tmpl) return;
+  if(!confirm(`Delete the saved layout "${tmpl.name}"? This can't be undone. (It won't affect any class currently using it.)`)) return;
+  db.ref(`${ROOT}/layoutTemplates/${id}`).remove();
+  setStatus('Layout deleted');
 }
 
 /* ====== GRID GENERATION ====== */
