@@ -225,13 +225,23 @@
     position:absolute;
     top:-10px;
     left:-8px;
-    font-size:18px;
+    width:22px;
+    height:22px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
     cursor:pointer;
-    background:#fff;
+    background:var(--red);
     border-radius:50%;
-    line-height:1;
-    padding:2px;
-    border:1.5px solid var(--border);
+    box-shadow:0 1px 3px rgba(0,0,0,.25);
+  }
+  .removeSeatIcon:hover{
+    background:var(--red-dark);
+  }
+  .removeSeatIcon svg{
+    width:13px;
+    height:13px;
+    fill:#fff;
   }
   #room.printing .removeSeatIcon{display:none;}
   .deskIcons{
@@ -252,6 +262,18 @@
     line-height:24px;
     text-align:center;
     cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    box-shadow:0 1px 3px rgba(0,0,0,.25);
+  }
+  .deskIcons span:hover{
+    background:#000;
+  }
+  .deskIcons span svg{
+    width:12px;
+    height:12px;
+    fill:#fff;
   }
   .deskIcons span.gear{background:#555;}
   #room.printing .seat.locked{
@@ -393,8 +415,9 @@
   <div class="group">
     <label>Roster</label>
     <button class="secondary" onclick="document.getElementById('csvInput').click()">Upload CSV</button>
+    <button class="secondary" onclick="clearRoster()">Clear Roster</button>
     <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleCSV(event)">
-    <span style="font-size:11px;color:var(--muted);max-width:220px;">Format: Last, First, Gender(M/F) — one student per line. A header row is fine, it's skipped automatically.</span>
+    <span style="font-size:11px;color:var(--muted);max-width:220px;">Format: Last, First, Gender(M/F) — one student per line. A header row is fine, it's skipped automatically. Uploading adds to the current roster — click Clear Roster first to fully replace it.</span>
   </div>
 
   <div class="group">
@@ -443,7 +466,7 @@
   <div id="roomWrap">
     <div id="roomHeader">
       <h2 id="roomTitle">No class selected</h2>
-      <span style="font-size:12px;color:var(--muted)">Empty desks can be dragged into place directly. Once a desk has a student, toggle "Arrange Desks" to reposition it. Click ⋮ for table options (seat count / delete), 🔒 to lock a student in place, ↩ to send them back to Unassigned.</span>
+      <span style="font-size:12px;color:var(--muted)">Empty desks can be dragged into place directly. Once a desk has a student, toggle "Arrange Desks" to reposition it. Click × to remove a table, 🔒 to lock a student in place, the undo arrow to send them back to Unassigned.</span>
     </div>
     <div id="room"></div>
   </div>
@@ -489,6 +512,7 @@
       <li><b>CSV upload format:</b> <code>Last, First, Gender(M/F)</code> — one student per line. A header row (like "Last Name, First Name, Gender") is detected and skipped automatically.</li>
       <li>Click the <b>(M)/(F)/(-)</b> badge on any unassigned student's chip to change their gender anytime.</li>
       <li>Click a student's <b>name</b> (in the Unassigned list or in a seat) to rename them — renaming doesn't move or unseat them.</li>
+      <li><b>Clear Roster</b> removes every student from the current class at once (and clears seating too) — handy before uploading a whole new roster, since CSV upload only <i>adds</i> students rather than replacing the list.</li>
     </ul>
 
     <h3>Building desks</h3>
@@ -496,7 +520,7 @@
       <li><b>Quick Grid:</b> pick rows × columns and seats-per-desk (1 = individual desks, 2 = lab tables), then Generate. This replaces the current layout and clears seating — use it when starting fresh, not for daily reshuffling.</li>
       <li><b>+ Add Desk:</b> adds one single desk. It's draggable immediately, even before anyone sits there.</li>
       <li>Once a desk has a student in it, drag it via the <b>Arrange Desks: On</b> toggle instead (this avoids conflicting with dragging the student).</li>
-      <li>Click the ⋮ on any desk for <b>Table Options</b>: change how many seats it has, or delete the table entirely (any seated student returns to Unassigned).</li>
+      <li>Click the × on any desk to remove that table (any seated student returns to Unassigned).</li>
     </ul>
 
     <h3>Saved Layouts (Rows / Groups / etc.)</h3>
@@ -513,7 +537,7 @@
     <h3>Seat icons</h3>
     <ul>
       <li><b>🔒 / 🔓</b> (bottom-right of a filled seat): click to lock/unlock that student. Locked students are skipped by Randomize/Reshuffle and protected from drag-and-drop.</li>
-      <li><b>↩</b> (top-left of a filled seat): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
+      <li>The <b>undo arrow</b> (top-left of a filled seat): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
     </ul>
 
     <div class="tip">
@@ -525,17 +549,6 @@
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
-    </div>
-  </div>
-</div>
-
-<div class="modalBg" id="deskOptionsModal">
-  <div class="modal">
-    <h3>Table Options</h3>
-    <div class="btnRow" style="justify-content:flex-start;flex-direction:column;gap:8px;">
-      <button style="width:100%;" onclick="handleDeskOptionChangeSeats()">Change Seat Count</button>
-      <button style="width:100%;background:#b0261a;" onclick="handleDeskOptionDelete()">Delete This Table</button>
-      <button style="width:100%;" class="secondary" onclick="closeDeskOptionsModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -657,28 +670,6 @@ function closeNewClassModal(){ document.getElementById('newClassModal').classLis
 function openHelpModal(){ document.getElementById('helpModal').classList.add('show'); }
 function closeHelpModal(){ document.getElementById('helpModal').classList.remove('show'); }
 
-/* ====== DESK OPTIONS MODAL ====== */
-let deskOptionsTargetId = null;
-function openDeskOptions(deskId){
-  deskOptionsTargetId = deskId;
-  document.getElementById('deskOptionsModal').classList.add('show');
-}
-function closeDeskOptionsModal(){
-  deskOptionsTargetId = null;
-  document.getElementById('deskOptionsModal').classList.remove('show');
-}
-function handleDeskOptionChangeSeats(){
-  const id = deskOptionsTargetId;
-  closeDeskOptionsModal();
-  if(id) editCapacity(id);
-}
-function handleDeskOptionDelete(){
-  const id = deskOptionsTargetId;
-  closeDeskOptionsModal();
-  if(!id) return;
-  if(!confirm('Delete this table? Any student seated there will move back to Unassigned.')) return;
-  removeDesk(id);
-}
 function createNewClass(){
   const name = document.getElementById('newClassName').value.trim();
   if(!name) return;
@@ -711,6 +702,16 @@ function removeStudent(id){
       if(stuId === id) db.ref(`${ROOT}/seating/${currentClassId}/${deskId}/${slot}`).remove();
     });
   });
+}
+
+function clearRoster(){
+  if(!currentClassId){ alert('Select or create a class first.'); return; }
+  const count = Object.keys(roster).length;
+  if(count === 0){ alert('This class has no students yet.'); return; }
+  if(!confirm(`Remove all ${count} students from this class's roster? This also clears seating for this class. This can't be undone.`)) return;
+  db.ref(`${ROOT}/rosters/${currentClassId}`).remove();
+  db.ref(`${ROOT}/seating/${currentClassId}`).remove();
+  setStatus('Roster cleared');
 }
 
 function handleCSV(event){
@@ -1021,11 +1022,15 @@ function render(){
 
     const icons = document.createElement('div');
     icons.className = 'deskIcons';
-    const options = document.createElement('span');
-    options.textContent = '⋮';
-    options.title = 'Table options';
-    options.onclick = (e)=>{ e.stopPropagation(); openDeskOptions(deskId); };
-    icons.appendChild(options);
+    const remove = document.createElement('span');
+    remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+    remove.title = 'Remove this table';
+    remove.onclick = (e)=>{
+      e.stopPropagation();
+      if(!confirm('Remove this table? Any student seated there will move back to Unassigned.')) return;
+      removeDesk(deskId);
+    };
+    icons.appendChild(remove);
     desk.appendChild(icons);
 
     for(let i=0;i<capacity;i++){
@@ -1055,7 +1060,7 @@ function render(){
         if(!isLocked){
           const removeIcon = document.createElement('span');
           removeIcon.className = 'removeSeatIcon';
-          removeIcon.textContent = '↩';
+          removeIcon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>';
           removeIcon.title = 'Send this student back to Unassigned';
           removeIcon.onclick = (e)=>{ e.stopPropagation(); unseatSlot(deskId, i); };
           seat.appendChild(removeIcon);
