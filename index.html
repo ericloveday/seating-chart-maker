@@ -159,6 +159,12 @@
   .desk.arrangeMode{
     cursor:grab;
   }
+  .desk.selected{
+    box-shadow:0 0 0 3px #2563eb, 0 1px 3px rgba(0,0,0,.08);
+  }
+  .desk.selectable{
+    cursor:pointer;
+  }
   .desk.movable{
     cursor:grab;
   }
@@ -446,6 +452,12 @@
   </div>
 
   <div class="group">
+    <button class="toggle" id="selectModeBtn" onclick="toggleSelectMode()">Select Tables: Off</button>
+    <button class="secondary" onclick="duplicateSelected()">Duplicate Selected</button>
+    <button class="secondary" onclick="clearSelection()">Clear Selection</button>
+  </div>
+
+  <div class="group">
     <label>Shuffle</label>
     <button onclick="randomizeAll()">🔀 Randomize / Reshuffle</button>
     <label style="display:flex;align-items:center;gap:4px;font-weight:600;">
@@ -523,6 +535,7 @@
       <li>Once a desk has a student in it, drag it via the <b>Arrange Desks: On</b> toggle instead (this avoids conflicting with dragging the student).</li>
       <li>Click the × on any desk to remove that table (any seated student returns to Unassigned).</li>
       <li>Click the rotate icon (↻) to turn a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
+      <li><b>Select Tables: On</b> lets you click tables to select them (blue outline). Drag any selected table and the whole selected group moves together, keeping their arrangement. <b>Duplicate Selected</b> clones the whole selected group — same layout, same rotations — placed just to the right, and auto-selects the copies so you can keep duplicating to build a row of matching groups fast. <b>Clear Selection</b> deselects everything.</li>
     </ul>
 
     <h3>Saved Layouts (Rows / Groups / etc.)</h3>
@@ -584,6 +597,8 @@ let seating = {};
 let locks = {};
 let templates = {};
 let arrangeMode = false;
+let selectMode = false;
+let selectedDeskIds = new Set();
 let teacherName = '';
 
 function loadTeacherName(){
@@ -724,7 +739,10 @@ function removeStudent(id){
   db.ref(`${ROOT}/rosters/${currentClassId}/${id}`).remove();
   Object.entries(seating).forEach(([deskId, seats])=>{
     Object.entries(seats||{}).forEach(([slot, stuId])=>{
-      if(stuId === id) db.ref(`${ROOT}/seating/${currentClassId}/${deskId}/${slot}`).remove();
+      if(stuId === id){
+        db.ref(`${ROOT}/seating/${currentClassId}/${deskId}/${slot}`).remove();
+        db.ref(`${ROOT}/locks/${currentClassId}/${deskId}/${slot}`).remove();
+      }
     });
   });
 }
@@ -895,6 +913,55 @@ function toggleArrange(){
   render();
 }
 
+function toggleSelectMode(){
+  selectMode = !selectMode;
+  const btn = document.getElementById('selectModeBtn');
+  btn.textContent = `Select Tables: ${selectMode ? 'On' : 'Off'}`;
+  btn.classList.toggle('active', selectMode);
+  if(!selectMode) selectedDeskIds.clear();
+  render();
+}
+
+function toggleDeskSelection(deskId){
+  if(selectedDeskIds.has(deskId)) selectedDeskIds.delete(deskId);
+  else selectedDeskIds.add(deskId);
+  render();
+}
+
+function clearSelection(){
+  selectedDeskIds.clear();
+  render();
+}
+
+function duplicateSelected(){
+  if(!currentClassId){ alert('Select or create a class first.'); return; }
+  if(selectedDeskIds.size === 0){ alert('Turn on "Select Tables", then click one or more tables to select them first.'); return; }
+  const ids = Array.from(selectedDeskIds).filter(id => layout[id]);
+  if(ids.length === 0) return;
+
+  const xs = ids.map(id => layout[id].x);
+  const maxX = Math.max(...xs);
+  const minX = Math.min(...xs);
+  const offsetX = (maxX - minX) + 170;
+
+  const updates = {};
+  const newIds = [];
+  ids.forEach(id=>{
+    const d = layout[id];
+    const newId = slugId('desk');
+    updates[`${ROOT}/layouts/${currentClassId}/${newId}`] = {
+      x: d.x + offsetX,
+      y: d.y,
+      capacity: d.capacity || 1,
+      rotation: d.rotation || 0
+    };
+    newIds.push(newId);
+  });
+  db.ref().update(updates);
+  selectedDeskIds = new Set(newIds);
+  setStatus('Tables duplicated');
+}
+
 /* ====== SEATING ACTIONS ====== */
 function randomizeAll(){
   if(!currentClassId) return;
@@ -1001,6 +1068,7 @@ function clearSeats(){
   if(!currentClassId) return;
   if(!confirm('Send all students back to Unassigned?')) return;
   db.ref(`${ROOT}/seating/${currentClassId}`).remove();
+  db.ref(`${ROOT}/locks/${currentClassId}`).remove();
 }
 
 function seatStudent(deskId, slot, studentId){
@@ -1016,6 +1084,7 @@ function seatStudent(deskId, slot, studentId){
 
 function unseatSlot(deskId, slot){
   db.ref(`${ROOT}/seating/${currentClassId}/${deskId}/${slot}`).remove();
+  db.ref(`${ROOT}/locks/${currentClassId}/${deskId}/${slot}`).remove();
 }
 
 /* ====== DRAG & DROP ====== */
@@ -1047,7 +1116,9 @@ function render(){
     const capacity = pos.capacity || 1;
     const deskHasStudent = Object.values(seating[deskId] || {}).some(sid => !!sid);
     const desk = document.createElement('div');
-    desk.className = 'desk' + (arrangeMode ? ' arrangeMode' : '') + (capacity === 1 ? ' single' : '') + (!deskHasStudent ? ' movable' : '');
+    const isSelected = selectedDeskIds.has(deskId);
+    desk.className = 'desk' + (arrangeMode ? ' arrangeMode' : '') + (capacity === 1 ? ' single' : '') + (!deskHasStudent ? ' movable' : '') + (selectMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
+    desk.dataset.deskId = deskId;
     desk.style.left = pos.x + 'px';
     desk.style.top = pos.y + 'px';
 
@@ -1106,7 +1177,7 @@ function render(){
         }
       }
 
-      if(!arrangeMode && !isLocked){
+      if(!arrangeMode && !isLocked && !selectMode){
         seat.ondragover = (e)=>{ e.preventDefault(); seat.classList.add('dropTarget'); };
         seat.ondragleave = ()=> seat.classList.remove('dropTarget');
         seat.ondrop = (e)=> dropOnSeat(e, deskId, i);
@@ -1122,7 +1193,7 @@ function render(){
       desk.appendChild(seat);
     }
 
-    if(arrangeMode || !deskHasStudent){
+    if(arrangeMode || !deskHasStudent || selectMode){
       desk.onmousedown = (e)=> startDeskDrag(e, deskId, desk);
     }
 
@@ -1169,29 +1240,62 @@ function render(){
   });
 }
 
-/* ====== DESK DRAGGING (arrange mode) ====== */
+/* ====== DESK DRAGGING / SELECTION ====== */
 function startDeskDrag(e, deskId, deskEl){
-  if(e.target.tagName === 'SPAN') return; // clicked an icon, not a drag
-  const roomRect = document.getElementById('room').getBoundingClientRect();
-  const deskRect = deskEl.getBoundingClientRect();
-  const offsetX = e.clientX - deskRect.left;
-  const offsetY = e.clientY - deskRect.top;
+  if(e.target.tagName === 'SPAN') return; // clicked an icon, not a drag/select
+
+  const startClientX = e.clientX;
+  const startClientY = e.clientY;
+
+  // Decide which desks move together: if this desk is part of the current
+  // selection, drag the whole selection; otherwise just this one desk.
+  const groupIds = (selectMode && selectedDeskIds.has(deskId) && selectedDeskIds.size > 0)
+    ? Array.from(selectedDeskIds).filter(id => layout[id])
+    : [deskId];
+
+  const startPositions = {};
+  groupIds.forEach(id=>{
+    startPositions[id] = { x: layout[id].x, y: layout[id].y };
+  });
+
+  let moved = false;
   deskEl.classList.add('dragging');
 
   function onMove(ev){
-    const x = ev.clientX - roomRect.left - offsetX;
-    const y = ev.clientY - roomRect.top - offsetY;
-    deskEl.style.left = Math.max(0, x) + 'px';
-    deskEl.style.top = Math.max(0, y) + 'px';
+    const dx = ev.clientX - startClientX;
+    const dy = ev.clientY - startClientY;
+    if(Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
+    if(!moved) return;
+    groupIds.forEach(id=>{
+      const el = document.querySelector(`.desk[data-desk-id="${id}"]`);
+      if(el){
+        el.style.left = Math.max(0, startPositions[id].x + dx) + 'px';
+        el.style.top = Math.max(0, startPositions[id].y + dy) + 'px';
+      }
+    });
   }
-  function onUp(){
+
+  function onUp(ev){
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     deskEl.classList.remove('dragging');
-    const x = parseInt(deskEl.style.left);
-    const y = parseInt(deskEl.style.top);
-    db.ref(`${ROOT}/layouts/${currentClassId}/${deskId}`).update({x, y});
+
+    if(!moved){
+      // This was a click, not a drag.
+      if(selectMode) toggleDeskSelection(deskId);
+      return;
+    }
+
+    const dx = ev.clientX - startClientX;
+    const dy = ev.clientY - startClientY;
+    const updates = {};
+    groupIds.forEach(id=>{
+      updates[`${ROOT}/layouts/${currentClassId}/${id}/x`] = Math.max(0, startPositions[id].x + dx);
+      updates[`${ROOT}/layouts/${currentClassId}/${id}/y`] = Math.max(0, startPositions[id].y + dy);
+    });
+    db.ref().update(updates);
   }
+
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
 }
