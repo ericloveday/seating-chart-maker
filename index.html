@@ -331,6 +331,7 @@
     <label>Roster</label>
     <button class="secondary" onclick="document.getElementById('csvInput').click()">Upload CSV</button>
     <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleCSV(event)">
+    <span style="font-size:11px;color:var(--muted);max-width:220px;">Format: Last, First, Gender(M/F) — one student per line. A header row is fine, it's skipped automatically.</span>
   </div>
 
   <div class="group">
@@ -342,11 +343,11 @@
 
   <div class="group">
     <label>Quick Grid</label>
-    <input type="number" id="rowsInput" min="1" max="12" value="4"> ×
+    <input type="number" id="rowsInput" min="1" max="12" value="3"> ×
     <input type="number" id="colsInput" min="1" max="12" value="5">
     <select id="capacitySelect">
       <option value="1">1 seat/desk</option>
-      <option value="2">2 seats/desk (lab table)</option>
+      <option value="2" selected>2 seats/desk (lab table)</option>
     </select>
     <button onclick="generateGrid()">Generate</button>
   </div>
@@ -409,15 +410,15 @@
 
 <script>
 /* ====== FIREBASE CONFIG - REPLACE WITH YOUR PROJECT CONFIG ====== */
-  const firebaseConfig = {
-    apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
-    authDomain: "bathroom-check-out.firebaseapp.com",
-    databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
-    projectId: "bathroom-check-out",
-    storageBucket: "bathroom-check-out.firebasestorage.app",
-    messagingSenderId: "385219454253",
-    appId: "1:385219454253:web:970acbfe28672f73c45fa4"
-  };
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "bathroom-check-out.firebaseapp.com",
+  databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
+  projectId: "bathroom-check-out",
+  storageBucket: "bathroom-check-out.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const ROOT = "seatingCharts";
@@ -544,8 +545,13 @@ function handleCSV(event){
   reader.onload = (e)=>{
     const lines = e.target.result.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
     const updates = {};
-    lines.forEach(line=>{
+    lines.forEach((line, idx)=>{
       let clean = line.replace(/["']/g,'');
+      const lower = clean.toLowerCase();
+      // Skip an obvious header row, e.g. "Last Name, First Name, Gender"
+      if(idx === 0 && (lower.includes('last') || lower.includes('first') || lower.includes('name') || lower.includes('gender') || lower.includes('student'))){
+        return;
+      }
       let name, gender = "";
       const parts = clean.split(',').map(s=>s.trim());
       if(parts.length >= 3){
@@ -617,7 +623,17 @@ function generateGrid(){
   if(!confirm(`This replaces the current desk layout with a ${rows}x${cols} grid (${capacity} seat${capacity>1?'s':''}/desk). Continue?`)) return;
 
   const deskWidth = capacity * 84 + (capacity-1)*4 + 8;
-  const gapX = deskWidth + 20, gapY = 80, startX = 15, startY = 15;
+  const deskHeight = 62;
+  const gapX = deskWidth + 20, gapY = 80;
+  const totalWidth = cols * deskWidth + (cols - 1) * 20;
+  const totalHeight = rows * deskHeight + (rows - 1) * (gapY - deskHeight);
+
+  const roomEl = document.getElementById('room');
+  const roomW = roomEl.clientWidth || 900;
+  const roomH = roomEl.clientHeight || 460;
+  const startX = Math.max(15, Math.round((roomW - totalWidth) / 2));
+  const startY = Math.max(15, Math.round((roomH - totalHeight) / 2));
+
   const newLayout = {};
   for(let r=0;r<rows;r++){
     for(let c=0;c<cols;c++){
@@ -669,9 +685,9 @@ function randomizeAll(){
 
   const alternate = document.getElementById('alternateGenderToggle').checked;
 
-  // Seats in reading order (top-to-bottom, left-to-right) so alternation looks right
+  // Seats in "front of room first" order: bottom row (highest y) first, left-to-right within a row
   const deskEntries = Object.entries(layout).sort((a,b)=>{
-    if(Math.abs(a[1].y - b[1].y) > 20) return a[1].y - b[1].y;
+    if(Math.abs(a[1].y - b[1].y) > 20) return b[1].y - a[1].y;
     return a[1].x - b[1].x;
   });
 
