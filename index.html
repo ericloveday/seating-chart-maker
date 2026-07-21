@@ -423,7 +423,8 @@
   </div>
 
   <div class="group">
-<button class="secondary" onclick="openHelpModal()">❓ Cheat Sheet</button>  </div>
+    <button class="secondary" onclick="openHelpModal()">❓ Cheat Sheet</button>
+  </div>
 </div>
 
 <div id="app">
@@ -561,12 +562,14 @@ function loadClassList(){
     const sel = document.getElementById('classSelect');
     const prev = currentClassId;
     sel.innerHTML = '<option value="">-- select class --</option>';
-    Object.entries(classes).forEach(([id,c])=>{
-      const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = c.name;
-      sel.appendChild(opt);
-    });
+    Object.entries(classes)
+      .sort((a,b) => a[1].name.localeCompare(b[1].name, undefined, {numeric:true, sensitivity:'base'}))
+      .forEach(([id,c])=>{
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = c.name;
+        sel.appendChild(opt);
+      });
     if(prev && classes[prev]) sel.value = prev;
   });
 }
@@ -1006,7 +1009,9 @@ function render(){
 
   const list = document.getElementById('unassignedList');
   list.innerHTML = '';
-  const unassigned = Object.entries(roster).filter(([id])=>!seatedIds.has(id));
+  const unassigned = Object.entries(roster)
+    .filter(([id])=>!seatedIds.has(id))
+    .sort((a,b)=> a[1].name.localeCompare(b[1].name, undefined, {sensitivity:'base'}));
   if(unassigned.length === 0){
     list.innerHTML = '<div id="emptyMsg">Everyone is seated 🎉</div>';
   }
