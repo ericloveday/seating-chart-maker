@@ -181,6 +181,7 @@
     font-weight:700;
     padding:3px;
     cursor:grab;
+    z-index:1;
   }
   .seat.filled{
     border-style:solid;
@@ -239,6 +240,7 @@
     right:-13px;
     display:flex;
     gap:3px;
+    z-index:10;
   }
   .deskIcons span{
     width:24px;
@@ -441,7 +443,7 @@
   <div id="roomWrap">
     <div id="roomHeader">
       <h2 id="roomTitle">No class selected</h2>
-      <span style="font-size:12px;color:var(--muted)">Empty desks can be dragged into place directly. Once a desk has a student, toggle "Arrange Desks" to reposition it. Click ⚙ to set seat count, 🔒 to lock a student in place, ↩ to send them back to Unassigned.</span>
+      <span style="font-size:12px;color:var(--muted)">Empty desks can be dragged into place directly. Once a desk has a student, toggle "Arrange Desks" to reposition it. Click ⋮ for table options (seat count / delete), 🔒 to lock a student in place, ↩ to send them back to Unassigned.</span>
     </div>
     <div id="room"></div>
   </div>
@@ -494,8 +496,7 @@
       <li><b>Quick Grid:</b> pick rows × columns and seats-per-desk (1 = individual desks, 2 = lab tables), then Generate. This replaces the current layout and clears seating — use it when starting fresh, not for daily reshuffling.</li>
       <li><b>+ Add Desk:</b> adds one single desk. It's draggable immediately, even before anyone sits there.</li>
       <li>Once a desk has a student in it, drag it via the <b>Arrange Desks: On</b> toggle instead (this avoids conflicting with dragging the student).</li>
-      <li>Click the ⚙ on any desk to change how many seats it has (e.g. turn a single desk into a 2-person table).</li>
-      <li>Click the × on a desk to delete it.</li>
+      <li>Click the ⋮ on any desk for <b>Table Options</b>: change how many seats it has, or delete the table entirely (any seated student returns to Unassigned).</li>
     </ul>
 
     <h3>Saved Layouts (Rows / Groups / etc.)</h3>
@@ -524,6 +525,17 @@
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="deskOptionsModal">
+  <div class="modal">
+    <h3>Table Options</h3>
+    <div class="btnRow" style="justify-content:flex-start;flex-direction:column;gap:8px;">
+      <button style="width:100%;" onclick="handleDeskOptionChangeSeats()">Change Seat Count</button>
+      <button style="width:100%;background:#b0261a;" onclick="handleDeskOptionDelete()">Delete This Table</button>
+      <button style="width:100%;" class="secondary" onclick="closeDeskOptionsModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -644,6 +656,29 @@ function closeNewClassModal(){ document.getElementById('newClassModal').classLis
 /* ====== HELP MODAL ====== */
 function openHelpModal(){ document.getElementById('helpModal').classList.add('show'); }
 function closeHelpModal(){ document.getElementById('helpModal').classList.remove('show'); }
+
+/* ====== DESK OPTIONS MODAL ====== */
+let deskOptionsTargetId = null;
+function openDeskOptions(deskId){
+  deskOptionsTargetId = deskId;
+  document.getElementById('deskOptionsModal').classList.add('show');
+}
+function closeDeskOptionsModal(){
+  deskOptionsTargetId = null;
+  document.getElementById('deskOptionsModal').classList.remove('show');
+}
+function handleDeskOptionChangeSeats(){
+  const id = deskOptionsTargetId;
+  closeDeskOptionsModal();
+  if(id) editCapacity(id);
+}
+function handleDeskOptionDelete(){
+  const id = deskOptionsTargetId;
+  closeDeskOptionsModal();
+  if(!id) return;
+  if(!confirm('Delete this table? Any student seated there will move back to Unassigned.')) return;
+  removeDesk(id);
+}
 function createNewClass(){
   const name = document.getElementById('newClassName').value.trim();
   if(!name) return;
@@ -986,17 +1021,11 @@ function render(){
 
     const icons = document.createElement('div');
     icons.className = 'deskIcons';
-    const gear = document.createElement('span');
-    gear.className = 'gear';
-    gear.textContent = '⚙';
-    gear.title = 'Set seat count';
-    gear.onclick = (e)=>{ e.stopPropagation(); editCapacity(deskId); };
-    const remove = document.createElement('span');
-    remove.textContent = '×';
-    remove.title = 'Remove desk';
-    remove.onclick = (e)=>{ e.stopPropagation(); removeDesk(deskId); };
-    icons.appendChild(gear);
-    icons.appendChild(remove);
+    const options = document.createElement('span');
+    options.textContent = '⋮';
+    options.title = 'Table options';
+    options.onclick = (e)=>{ e.stopPropagation(); openDeskOptions(deskId); };
+    icons.appendChild(options);
     desk.appendChild(icons);
 
     for(let i=0;i<capacity;i++){
@@ -1166,15 +1195,13 @@ function exportPDF(){
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(16);
     pdf.setTextColor(206, 31, 7); // matches --red
-    pdf.text(title, margin, margin);
+    const headerTitle = teacherName ? `${teacherName}: ${title}` : title;
+    pdf.text(headerTitle, margin, margin);
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
     pdf.setTextColor(100, 100, 100);
-    const subtitleParts = [];
-    if(teacherName) subtitleParts.push(teacherName);
-    subtitleParts.push(`${dateStr} ${timeStr}`);
-    pdf.text(subtitleParts.join('  |  '), margin, margin + 14);
+    pdf.text(`${dateStr} ${timeStr}`, margin, margin + 14);
 
     pdf.addImage(imgData, 'PNG', margin, margin + 25, imgW, imgH);
 
