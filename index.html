@@ -252,6 +252,10 @@
     cursor:pointer;
   }
   .deskIcons span.gear{background:#555;}
+  #room.printing .seat.locked{
+    border-color:var(--red);
+    background:#fff;
+  }
   #room.printing .deskIcons{display:none;}
   #room.printing .seat{cursor:default;}
   #room.printing .lockIcon{display:none;}
@@ -380,6 +384,11 @@
   </div>
 
   <div class="group">
+    <label>Teacher Name</label>
+    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" onchange="saveTeacherName()">
+  </div>
+
+  <div class="group">
     <label>Roster</label>
     <button class="secondary" onclick="document.getElementById('csvInput').click()">Upload CSV</button>
     <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleCSV(event)">
@@ -469,7 +478,7 @@
     <h3 style="color:var(--text);font-size:18px;">🪑 How This App Works</h3>
 
     <h3>Classes</h3>
-    <p>Create one entry per period (New Class). Each class has its own roster, desks, seating, and locks — switching the Class dropdown swaps everything at once.</p>
+    <p>Create one entry per period (New Class). Each class has its own roster, desks, seating, and locks — switching the Class dropdown swaps everything at once. Set your <b>Teacher Name</b> once in the toolbar — it's saved automatically and appears on every printed PDF.</p>
 
     <h3>Adding students</h3>
     <ul>
@@ -510,7 +519,7 @@
     </div>
 
     <h3>Exporting</h3>
-    <p>📄 Export PDF snapshots the current layout (in landscape) with the class name as the title — ready to print and post by the door.</p>
+    <p>📄 Export PDF snapshots the current layout (in landscape) with the class name, your teacher name (if set), and the date/time as the header — ready to print and post by the door. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version.</p>
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
@@ -547,6 +556,21 @@ let seating = {};
 let locks = {};
 let templates = {};
 let arrangeMode = false;
+let teacherName = '';
+
+function loadTeacherName(){
+  db.ref(`${ROOT}/settings/teacherName`).on('value', snap=>{
+    teacherName = snap.val() || '';
+    const input = document.getElementById('teacherNameInput');
+    if(document.activeElement !== input) input.value = teacherName;
+  });
+}
+
+function saveTeacherName(){
+  const val = document.getElementById('teacherNameInput').value.trim();
+  db.ref(`${ROOT}/settings/teacherName`).set(val);
+  setStatus('Teacher name saved');
+}
 
 function setStatus(msg){
   document.getElementById('saveStatus').textContent = msg;
@@ -740,8 +764,8 @@ function generateGrid(){
 
   const deskWidth = capacity * 84 + (capacity-1)*4 + 8;
   const deskHeight = 62;
-  const gapX = deskWidth + 20, gapY = 80;
-  const totalWidth = cols * deskWidth + (cols - 1) * 20;
+  const gapX = deskWidth + 40, gapY = 100;
+  const totalWidth = cols * deskWidth + (cols - 1) * 40;
   const totalHeight = rows * deskHeight + (rows - 1) * (gapY - deskHeight);
 
   const roomEl = document.getElementById('room');
@@ -1116,7 +1140,11 @@ function exportPDF(){
     const imgH = canvas.height / 2;
     const margin = 30;
     const pageW = imgW + margin * 2;
-    const pageH = imgH + margin * 2 + 30;
+    const pageH = imgH + margin * 2 + 45;
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+    const timeStr = now.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
 
     const pdf = new jsPDF({
       orientation: 'landscape',
@@ -1129,9 +1157,18 @@ function exportPDF(){
     pdf.setTextColor(206, 31, 7); // matches --red
     pdf.text(title, margin, margin);
 
-    pdf.addImage(imgData, 'PNG', margin, margin + 15, imgW, imgH);
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.setTextColor(100, 100, 100);
+    const subtitleParts = [];
+    if(teacherName) subtitleParts.push(teacherName);
+    subtitleParts.push(`${dateStr} ${timeStr}`);
+    pdf.text(subtitleParts.join('  |  '), margin, margin + 14);
 
-    const fileName = title.replace(/[^a-z0-9]+/gi, '_') + '_seating_chart.pdf';
+    pdf.addImage(imgData, 'PNG', margin, margin + 25, imgW, imgH);
+
+    const stamp = now.toISOString().slice(0,16).replace('T','_').replace(':','-');
+    const fileName = title.replace(/[^a-z0-9]+/gi, '_') + '_seating_chart_' + stamp + '.pdf';
     pdf.save(fileName);
     setStatus('PDF saved');
   }).catch(err => {
@@ -1145,6 +1182,7 @@ function exportPDF(){
 /* ====== INIT ====== */
 loadClassList();
 loadTemplateList();
+loadTeacherName();
 </script>
 </body>
 </html>
