@@ -405,11 +405,12 @@
     <label>Class</label>
     <select id="classSelect"></select>
     <button class="secondary" onclick="openNewClassModal()">+ New Class</button>
+    <button class="secondary" onclick="deleteClass()">Delete Class</button>
   </div>
 
   <div class="group">
     <label>Teacher Name</label>
-    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" onchange="saveTeacherName()">
+    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" oninput="saveTeacherName()" onchange="saveTeacherNameWithStatus()">
   </div>
 
   <div class="group">
@@ -448,7 +449,7 @@
     <label>Shuffle</label>
     <button onclick="randomizeAll()">🔀 Randomize / Reshuffle</button>
     <label style="display:flex;align-items:center;gap:4px;font-weight:600;">
-      <input type="checkbox" id="alternateGenderToggle" style="width:auto;"> Alternate gender
+      <input type="checkbox" id="alternateGenderToggle" style="width:auto;" checked> Alternate gender
     </label>
     <button class="secondary" onclick="clearSeats()">Clear Seats</button>
   </div>
@@ -504,7 +505,7 @@
     <h3 style="color:var(--text);font-size:18px;">🪑 How This App Works</h3>
 
     <h3>Classes</h3>
-    <p>Create one entry per period (New Class). Each class has its own roster, desks, seating, and locks — switching the Class dropdown swaps everything at once. Set your <b>Teacher Name</b> once in the toolbar — it's saved automatically and appears on every printed PDF.</p>
+    <p>Create one entry per period (New Class). Each class has its own roster, desks, seating, and locks — switching the Class dropdown swaps everything at once. Set your <b>Teacher Name</b> once in the toolbar — it's saved automatically and appears on every printed PDF. <b>Delete Class</b> removes the selected class entirely, including its roster, desks, seating, and locks — this can't be undone.</p>
 
     <h3>Adding students</h3>
     <ul>
@@ -521,6 +522,7 @@
       <li><b>+ Add Desk:</b> adds one single desk. It's draggable immediately, even before anyone sits there.</li>
       <li>Once a desk has a student in it, drag it via the <b>Arrange Desks: On</b> toggle instead (this avoids conflicting with dragging the student).</li>
       <li>Click the × on any desk to remove that table (any seated student returns to Unassigned).</li>
+      <li>Click the rotate icon (↻) to turn a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
     </ul>
 
     <h3>Saved Layouts (Rows / Groups / etc.)</h3>
@@ -569,11 +571,11 @@ const db = firebase.database();
 const ROOT = "seatingCharts";
 
 /* ====== STATE ======
-  layout[deskId] = {x, y, capacity}
+  layout[deskId] = {x, y, capacity, rotation}
   seating[deskId] = { "0": studentId, "1": studentId, ... }
   roster[studentId] = {name, gender}
   locks[deskId] = { "0": true, ... }   // locked seat slots for current class
-  layoutTemplates[templateId] = {name, desks: {deskId:{x,y,capacity}}}
+  layoutTemplates[templateId] = {name, desks: {deskId:{x,y,capacity,rotation}}}
 */
 let currentClassId = null;
 let roster = {};
@@ -594,7 +596,12 @@ function loadTeacherName(){
 
 function saveTeacherName(){
   const val = document.getElementById('teacherNameInput').value.trim();
+  teacherName = val;
   db.ref(`${ROOT}/settings/teacherName`).set(val);
+}
+
+function saveTeacherNameWithStatus(){
+  saveTeacherName();
   setStatus('Teacher name saved');
 }
 
@@ -679,6 +686,24 @@ function createNewClass(){
   closeNewClassModal();
   document.getElementById('classSelect').value = id;
   selectClass(id);
+}
+
+function deleteClass(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  const sel = document.getElementById('classSelect');
+  const className = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : 'this class';
+  if(!confirm(`Delete "${className}" entirely? This removes its roster, desks, seating, and locks. This can't be undone.`)) return;
+  const idToDelete = currentClassId;
+  db.ref(`${ROOT}/classes/${idToDelete}`).remove();
+  db.ref(`${ROOT}/rosters/${idToDelete}`).remove();
+  db.ref(`${ROOT}/layouts/${idToDelete}`).remove();
+  db.ref(`${ROOT}/seating/${idToDelete}`).remove();
+  db.ref(`${ROOT}/locks/${idToDelete}`).remove();
+  currentClassId = null;
+  document.getElementById('roomTitle').textContent = "No class selected";
+  document.getElementById('room').innerHTML = "";
+  document.getElementById('unassignedList').innerHTML = "";
+  setStatus('Class deleted');
 }
 
 /* ====== ROSTER ====== */
@@ -840,6 +865,12 @@ function addDesk(){
 function removeDesk(deskId){
   db.ref(`${ROOT}/layouts/${currentClassId}/${deskId}`).remove();
   db.ref(`${ROOT}/seating/${currentClassId}/${deskId}`).remove();
+}
+
+function rotateDesk(deskId){
+  const current = (layout[deskId] && layout[deskId].rotation) || 0;
+  const next = (current + 90) % 360;
+  db.ref(`${ROOT}/layouts/${currentClassId}/${deskId}/rotation`).set(next);
 }
 
 function editCapacity(deskId){
@@ -1022,6 +1053,10 @@ function render(){
 
     const icons = document.createElement('div');
     icons.className = 'deskIcons';
+    const rotateBtn = document.createElement('span');
+    rotateBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08a6.003 6.003 0 01-5.65 4c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L14 11h7V4l-3.35 2.35z"/></svg>';
+    rotateBtn.title = 'Rotate this table 90°';
+    rotateBtn.onclick = (e)=>{ e.stopPropagation(); rotateDesk(deskId); };
     const remove = document.createElement('span');
     remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
     remove.title = 'Remove this table';
@@ -1030,8 +1065,12 @@ function render(){
       if(!confirm('Remove this table? Any student seated there will move back to Unassigned.')) return;
       removeDesk(deskId);
     };
+    icons.appendChild(rotateBtn);
     icons.appendChild(remove);
     desk.appendChild(icons);
+
+    const rotation = pos.rotation || 0;
+    desk.style.transform = `rotate(${rotation}deg)`;
 
     for(let i=0;i<capacity;i++){
       const studentId = seating[deskId] ? seating[deskId][i] : null;
@@ -1200,7 +1239,8 @@ function exportPDF(){
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(16);
     pdf.setTextColor(206, 31, 7); // matches --red
-    const headerTitle = teacherName ? `${teacherName}: ${title}` : title;
+    const currentTeacherName = document.getElementById('teacherNameInput').value.trim();
+    const headerTitle = currentTeacherName ? `${currentTeacherName}: ${title}` : title;
     pdf.text(headerTitle, margin, margin);
 
     pdf.setFont('helvetica', 'normal');
