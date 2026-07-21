@@ -159,6 +159,9 @@
   .desk.arrangeMode{
     cursor:grab;
   }
+  .desk.movable{
+    cursor:grab;
+  }
   .desk.dragging{
     opacity:.6;
     cursor:grabbing;
@@ -189,6 +192,7 @@
     font-weight:600;
     font-style:italic;
     cursor:default;
+    border-color:rgba(206,31,7,0.4);
   }
   .seat.dropTarget{
     background:#fdeceb;
@@ -207,43 +211,43 @@
   }
   .lockIcon{
     position:absolute;
-    bottom:-8px;
-    right:-6px;
-    font-size:12px;
+    bottom:-10px;
+    right:-8px;
+    font-size:18px;
     cursor:pointer;
     background:#fff;
     border-radius:50%;
     line-height:1;
-    padding:1px;
+    padding:2px;
   }
   .removeSeatIcon{
     position:absolute;
-    top:-8px;
-    left:-6px;
-    font-size:12px;
+    top:-10px;
+    left:-8px;
+    font-size:18px;
     cursor:pointer;
     background:#fff;
     border-radius:50%;
     line-height:1;
-    padding:1px;
-    border:1px solid var(--border);
+    padding:2px;
+    border:1.5px solid var(--border);
   }
   #room.printing .removeSeatIcon{display:none;}
   .deskIcons{
     position:absolute;
-    top:-10px;
-    right:-10px;
+    top:-13px;
+    right:-13px;
     display:flex;
-    gap:2px;
+    gap:3px;
   }
   .deskIcons span{
-    width:18px;
-    height:18px;
+    width:24px;
+    height:24px;
     border-radius:50%;
     background:#333;
     color:#fff;
-    font-size:11px;
-    line-height:18px;
+    font-size:14px;
+    line-height:24px;
     text-align:center;
     cursor:pointer;
   }
@@ -330,6 +334,35 @@
   .modal h3{margin-top:0;font-size:16px;}
   .modal input{width:100%;margin-bottom:12px;}
   .modal .btnRow{display:flex;justify-content:flex-end;gap:8px;}
+  .helpModal{
+    width:600px;
+    max-width:90vw;
+    max-height:80vh;
+    overflow-y:auto;
+  }
+  .helpModal h3{
+    color:var(--red);
+    font-size:15px;
+    margin:18px 0 6px 0;
+  }
+  .helpModal h3:first-child{margin-top:0;}
+  .helpModal p, .helpModal li{
+    font-size:13px;
+    line-height:1.5;
+    color:var(--text);
+  }
+  .helpModal ul{
+    margin:4px 0 4px 18px;
+    padding:0;
+  }
+  .helpModal .tip{
+    background:#fdeceb;
+    border-left:3px solid var(--red);
+    padding:8px 10px;
+    border-radius:6px;
+    margin:8px 0;
+    font-size:13px;
+  }
 </style>
 </head>
 <body>
@@ -388,13 +421,17 @@
   <div class="group">
     <button class="secondary" onclick="exportPDF()">📄 Export PDF</button>
   </div>
+
+  <div class="group">
+    <button class="secondary" onclick="openHelpModal()">❓ Help</button>
+  </div>
 </div>
 
 <div id="app">
   <div id="roomWrap">
     <div id="roomHeader">
       <h2 id="roomTitle">No class selected</h2>
-      <span style="font-size:12px;color:var(--muted)">Drag students onto seats. Toggle "Arrange Desks" to move desks; click ⚙ on a desk to set how many seats it has; click 🔒 on a filled seat to lock that student in place.</span>
+      <span style="font-size:12px;color:var(--muted)">Empty desks can be dragged into place directly. Once a desk has a student, toggle "Arrange Desks" to reposition it. Click ⚙ to set seat count, 🔒 to lock a student in place, ↩ to send them back to Unassigned.</span>
     </div>
     <div id="room"></div>
   </div>
@@ -423,6 +460,59 @@
     <div class="btnRow">
       <button class="secondary" onclick="closeNewClassModal()">Cancel</button>
       <button onclick="createNewClass()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="helpModal">
+  <div class="modal helpModal">
+    <h3 style="color:var(--text);font-size:18px;">🪑 How This App Works</h3>
+
+    <h3>Classes</h3>
+    <p>Create one entry per period (New Class). Each class has its own roster, desks, seating, and locks — switching the Class dropdown swaps everything at once.</p>
+
+    <h3>Adding students</h3>
+    <ul>
+      <li>Type a name and pick M/F/- (or leave blank), then click +.</li>
+      <li><b>CSV upload format:</b> <code>Last, First, Gender(M/F)</code> — one student per line. A header row (like "Last Name, First Name, Gender") is detected and skipped automatically.</li>
+      <li>Click the <b>(M)/(F)/(-)</b> badge on any unassigned student's chip to change their gender anytime.</li>
+    </ul>
+
+    <h3>Building desks</h3>
+    <ul>
+      <li><b>Quick Grid:</b> pick rows × columns and seats-per-desk (1 = individual desks, 2 = lab tables), then Generate. This replaces the current layout and clears seating — use it when starting fresh, not for daily reshuffling.</li>
+      <li><b>+ Add Desk:</b> adds one single desk. It's draggable immediately, even before anyone sits there.</li>
+      <li>Once a desk has a student in it, drag it via the <b>Arrange Desks: On</b> toggle instead (this avoids conflicting with dragging the student).</li>
+      <li>Click the ⚙ on any desk to change how many seats it has (e.g. turn a single desk into a 2-person table).</li>
+      <li>Click the × on a desk to delete it.</li>
+    </ul>
+
+    <h3>Saved Layouts (Rows / Groups / etc.)</h3>
+    <p>Build a layout once, then <b>Save Current As...</b> and name it (e.g. "Rows" or "Lab Tables"). Later, pick it from the Saved Layout dropdown and click <b>Apply</b> to drop that same layout into any of your 6 classes. Applying a layout clears current seating for that class.</p>
+
+    <h3>Seating students</h3>
+    <ul>
+      <li>Drag a student chip from Unassigned onto any open seat.</li>
+      <li><b>🔀 Randomize / Reshuffle:</b> fills every unlocked seat with unlocked students, starting from the front row (bottom of the layout) and working back.</li>
+      <li><b>Alternate gender</b> checkbox: interleaves boy/girl in seat order instead of pure random.</li>
+      <li><b>Clear Seats:</b> sends everyone back to Unassigned (does not touch desks).</li>
+    </ul>
+
+    <h3>Seat icons</h3>
+    <ul>
+      <li><b>🔒 / 🔓</b> (bottom-right of a filled seat): click to lock/unlock that student. Locked students are skipped by Randomize/Reshuffle and protected from drag-and-drop.</li>
+      <li><b>↩</b> (top-left of a filled seat): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
+    </ul>
+
+    <div class="tip">
+      <b>IEP / 504 seating:</b> place the student in the seat they need, click 🔒 to lock it, then hit 🔀 Randomize/Reshuffle as usual — everyone else shuffles around them, and they'll stay locked in for future reshuffles too. Locked students are also excluded from the "Alternate gender" calculation, so they won't throw off the balance.
+    </div>
+
+    <h3>Exporting</h3>
+    <p>📄 Export PDF snapshots the current layout (in landscape) with the class name as the title — ready to print and post by the door.</p>
+
+    <div class="btnRow">
+      <button onclick="closeHelpModal()">Got it</button>
     </div>
   </div>
 </div>
@@ -522,6 +612,10 @@ function attachClassListeners(){
 /* ====== NEW CLASS MODAL ====== */
 function openNewClassModal(){ document.getElementById('newClassModal').classList.add('show'); }
 function closeNewClassModal(){ document.getElementById('newClassModal').classList.remove('show'); }
+
+/* ====== HELP MODAL ====== */
+function openHelpModal(){ document.getElementById('helpModal').classList.add('show'); }
+function closeHelpModal(){ document.getElementById('helpModal').classList.remove('show'); }
 function createNewClass(){
   const name = document.getElementById('newClassName').value.trim();
   if(!name) return;
@@ -838,8 +932,9 @@ function render(){
 
   Object.entries(layout).forEach(([deskId, pos])=>{
     const capacity = pos.capacity || 1;
+    const deskHasStudent = Object.values(seating[deskId] || {}).some(sid => !!sid);
     const desk = document.createElement('div');
-    desk.className = 'desk' + (arrangeMode ? ' arrangeMode' : '') + (capacity === 1 ? ' single' : '');
+    desk.className = 'desk' + (arrangeMode ? ' arrangeMode' : '') + (capacity === 1 ? ' single' : '') + (!deskHasStudent ? ' movable' : '');
     desk.style.left = pos.x + 'px';
     desk.style.top = pos.y + 'px';
 
@@ -903,7 +998,7 @@ function render(){
       desk.appendChild(seat);
     }
 
-    if(arrangeMode){
+    if(arrangeMode || !deskHasStudent){
       desk.onmousedown = (e)=> startDeskDrag(e, deskId, desk);
     }
 
