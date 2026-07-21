@@ -199,6 +199,12 @@
     background:#fff9e8;
     cursor:default;
   }
+  .desk.single{
+    padding:0;
+    border:none;
+    background:transparent;
+    box-shadow:none;
+  }
   .lockIcon{
     position:absolute;
     bottom:-8px;
@@ -210,6 +216,19 @@
     line-height:1;
     padding:1px;
   }
+  .removeSeatIcon{
+    position:absolute;
+    top:-8px;
+    left:-6px;
+    font-size:12px;
+    cursor:pointer;
+    background:#fff;
+    border-radius:50%;
+    line-height:1;
+    padding:1px;
+    border:1px solid var(--border);
+  }
+  #room.printing .removeSeatIcon{display:none;}
   .deskIcons{
     position:absolute;
     top:-10px;
@@ -630,9 +649,8 @@ function generateGrid(){
 
   const roomEl = document.getElementById('room');
   const roomW = roomEl.clientWidth || 900;
-  const roomH = roomEl.clientHeight || 460;
   const startX = Math.max(15, Math.round((roomW - totalWidth) / 2));
-  const startY = Math.max(15, Math.round((roomH - totalHeight) / 2));
+  const startY = 15;
 
   const newLayout = {};
   for(let r=0;r<rows;r++){
@@ -821,7 +839,7 @@ function render(){
   Object.entries(layout).forEach(([deskId, pos])=>{
     const capacity = pos.capacity || 1;
     const desk = document.createElement('div');
-    desk.className = 'desk' + (arrangeMode ? ' arrangeMode' : '');
+    desk.className = 'desk' + (arrangeMode ? ' arrangeMode' : '') + (capacity === 1 ? ' single' : '');
     desk.style.left = pos.x + 'px';
     desk.style.top = pos.y + 'px';
 
@@ -858,6 +876,15 @@ function render(){
         lockIcon.title = isLocked ? 'Unlock this seat' : 'Lock this student in place';
         lockIcon.onclick = (e)=>{ e.stopPropagation(); toggleLock(deskId, i); };
         seat.appendChild(lockIcon);
+
+        if(!isLocked){
+          const removeIcon = document.createElement('span');
+          removeIcon.className = 'removeSeatIcon';
+          removeIcon.textContent = '↩';
+          removeIcon.title = 'Send this student back to Unassigned';
+          removeIcon.onclick = (e)=>{ e.stopPropagation(); unseatSlot(deskId, i); };
+          seat.appendChild(removeIcon);
+        }
       }
 
       if(!arrangeMode && !isLocked){
