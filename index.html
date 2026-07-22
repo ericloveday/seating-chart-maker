@@ -577,7 +577,7 @@
     </div>
 
     <h3>Exporting</h3>
-    <p>📄 Export PDF snapshots the current layout (in landscape) with the class name, your teacher name (if set), and the date/time as the header — ready to print and post by the door. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version.</p>
+    <p>📄 Export PDF captures the current layout, rotates it 90° so it fills a full portrait sheet top-to-bottom (rather than shrinking sideways onto a landscape page), and adds the class name, your teacher name (if set), and the date/time as the header — ready to print and post by the door. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version.</p>
 
     <p>🧹 <b>Clean View</b> hides all the ⋮/↻/🔒/undo icons on screen (great when arranging groups — all those buttons can get visually busy) without turning off dragging or seating — you can still place students while it's on. Toggle it off to get the icons back.</p>
 
@@ -1375,22 +1375,44 @@ function exportPDF(){
     room.style.overflow = originalOverflow;
     room.style.height = originalHeight;
 
-    const imgData = canvas.toDataURL('image/png');
+    // Rotate the captured chart 90° clockwise onto an offscreen canvas so it
+    // can fill a portrait page top-to-bottom instead of being squeezed
+    // sideways onto a landscape page.
+    const rotated = document.createElement('canvas');
+    rotated.width = canvas.height;
+    rotated.height = canvas.width;
+    const rctx = rotated.getContext('2d');
+    rctx.translate(rotated.width, 0);
+    rctx.rotate(Math.PI / 2);
+    rctx.drawImage(canvas, 0, 0);
+
+    const imgData = rotated.toDataURL('image/png');
     const { jsPDF } = window.jspdf;
-    const imgW = canvas.width / 2;
-    const imgH = canvas.height / 2;
+    const nativeImgW = rotated.width / 2;
+    const nativeImgH = rotated.height / 2;
     const margin = 30;
-    const pageW = imgW + margin * 2;
-    const pageH = imgH + margin * 2 + 45;
+    const headerSpace = 45;
+
+    // Portrait Letter page — after rotating the content, the room's wide
+    // dimension now runs down the page's long (11in) edge.
+    const pageW = 612;  // 8.5in
+    const pageH = 792;  // 11in
+
+    const availW = pageW - margin * 2;
+    const availH = pageH - margin * 2 - headerSpace;
+    const scale = Math.min(availW / nativeImgW, availH / nativeImgH);
+    const imgW = nativeImgW * scale;
+    const imgH = nativeImgH * scale;
+    const imgX = margin + (availW - imgW) / 2;
 
     const now = new Date();
     const dateStr = now.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
     const timeStr = now.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
 
     const pdf = new jsPDF({
-      orientation: 'landscape',
+      orientation: 'portrait',
       unit: 'pt',
-      format: [Math.max(pageW, pageH), Math.min(pageW, pageH)]
+      format: 'letter'
     });
 
     pdf.setFont('helvetica', 'bold');
@@ -1405,7 +1427,7 @@ function exportPDF(){
     pdf.setTextColor(100, 100, 100);
     pdf.text(`${dateStr} ${timeStr}`, margin, margin + 14);
 
-    pdf.addImage(imgData, 'PNG', margin, margin + 25, imgW, imgH);
+    pdf.addImage(imgData, 'PNG', imgX, margin + 25, imgW, imgH);
 
     const stamp = now.toISOString().slice(0,16).replace('T','_').replace(':','-');
     const fileName = title.replace(/[^a-z0-9]+/gi, '_') + '_seating_chart_' + stamp + '.pdf';
