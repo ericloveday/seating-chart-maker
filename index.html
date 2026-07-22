@@ -1442,12 +1442,12 @@ function exportPDF(){
     pdf.setTextColor(206, 31, 7); // matches --red
     const currentTeacherName = document.getElementById('teacherNameInput').value.trim();
     const headerTitle = currentTeacherName ? `${currentTeacherName}: ${title}` : title;
-    pdf.text(headerTitle, margin, margin);
+    pdf.text(headerTitle, pageW / 2, margin, { align: 'center' });
 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(10);
     pdf.setTextColor(100, 100, 100);
-    pdf.text(`${dateStr} ${timeStr}`, margin, margin + 14);
+    pdf.text(`${dateStr} ${timeStr}`, pageW / 2, margin + 14, { align: 'center' });
 
     pdf.addImage(imgData, 'PNG', imgX, margin + 25, imgW, imgH);
 
