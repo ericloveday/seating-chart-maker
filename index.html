@@ -288,6 +288,14 @@
   }
   #room.printing .deskIcons{display:none;}
   #room.printing .seat{cursor:default;}
+  #room.printing .seat{
+    font-size:15px;
+    font-weight:800;
+  }
+  #room.printing .seat.empty{
+    font-size:13px;
+    font-weight:600;
+  }
   #room.printing .lockIcon{display:none;}
   #room.cleanView .deskIcons{display:none;}
   #room.cleanView .lockIcon{display:none;}
@@ -1376,7 +1384,7 @@ function exportPDF(){
     room.style.height = originalHeight;
 
     const margin = 30;
-    const headerSpace = 45;
+    const headerSpace = 52;
     const origW = canvas.width / 2;
     const origH = canvas.height / 2;
 
@@ -1438,18 +1446,18 @@ function exportPDF(){
     });
 
     pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(16);
+    pdf.setFontSize(20);
     pdf.setTextColor(206, 31, 7); // matches --red
     const currentTeacherName = document.getElementById('teacherNameInput').value.trim();
     const headerTitle = currentTeacherName ? `${currentTeacherName}: ${title}` : title;
     pdf.text(headerTitle, pageW / 2, margin, { align: 'center' });
 
     pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(10);
+    pdf.setFontSize(11);
     pdf.setTextColor(100, 100, 100);
-    pdf.text(`${dateStr} ${timeStr}`, pageW / 2, margin + 14, { align: 'center' });
+    pdf.text(`${dateStr} ${timeStr}`, pageW / 2, margin + 16, { align: 'center' });
 
-    pdf.addImage(imgData, 'PNG', imgX, margin + 25, imgW, imgH);
+    pdf.addImage(imgData, 'PNG', imgX, margin + 32, imgW, imgH);
 
     const stamp = now.toISOString().slice(0,16).replace('T','_').replace(':','-');
     const fileName = title.replace(/[^a-z0-9]+/gi, '_') + '_seating_chart_' + stamp + '.pdf';
