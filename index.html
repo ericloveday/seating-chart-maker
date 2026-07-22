@@ -422,20 +422,24 @@
 </header>
 
 <div class="toolbar">
+  <!-- 1. Teacher Name section moved here -->
+  <div class="group">
+    <label>Teacher Name</label>
+    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" oninput="saveTeacherName()" onchange="saveTeacherNameWithStatus()">
+  </div>
+
+  <!-- 2. Class section moved here -->
   <div class="group">
     <label>Class</label>
     <select id="classSelect"></select>
     <button class="secondary" onclick="openNewClassModal()">+ New Class</button>
     <button class="secondary" onclick="deleteClass()">Delete Class</button>
   </div>
-
-  <div class="group">
-    <label>Teacher Name</label>
-    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" oninput="saveTeacherName()" onchange="saveTeacherNameWithStatus()">
-  </div>
-
+  
+  <!-- The rest of your toolbar groups remain the same below -->
   <div class="group">
     <label>Roster</label>
+    <!-- ... -->
     <button class="secondary" onclick="document.getElementById('csvInput').click()">Upload CSV</button>
     <button class="secondary" onclick="clearRoster()">Clear Roster</button>
     <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleCSV(event)">
