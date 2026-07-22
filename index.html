@@ -289,6 +289,13 @@
   #room.printing .deskIcons{display:none;}
   #room.printing .seat{cursor:default;}
   #room.printing .lockIcon{display:none;}
+  #room.cleanView .deskIcons{display:none;}
+  #room.cleanView .lockIcon{display:none;}
+  #room.cleanView .removeSeatIcon{display:none;}
+  #room.cleanView .seat.locked{
+    border-color:var(--red);
+    background:#fff;
+  }
   .desk{position:absolute;}
   .deskInner{position:relative;display:flex;gap:4px;}
   #sidebar{
@@ -460,6 +467,11 @@
   <div class="group">
     <label>Shuffle</label>
     <button onclick="randomizeAll()">🔀 Randomize / Reshuffle</button>
+    <select id="placementOrderSelect" style="font-size:12px;">
+      <option value="random">Order: Random</option>
+      <option value="alphaFirst">Order: Alphabetical (First Name)</option>
+      <option value="alphaLast">Order: Alphabetical (Last Name)</option>
+    </select>
     <label style="display:flex;align-items:center;gap:4px;font-weight:600;">
       <input type="checkbox" id="alternateGenderToggle" style="width:auto;" checked> Alternate gender
     </label>
@@ -468,6 +480,10 @@
 
   <div class="group">
     <button class="secondary" onclick="exportPDF()">📄 Export PDF</button>
+  </div>
+
+  <div class="group">
+    <button class="toggle" id="cleanViewBtn" onclick="toggleCleanView()">🧹 Clean View: Off</button>
   </div>
 
   <div class="group">
@@ -545,7 +561,8 @@
     <ul>
       <li>Drag a student chip from Unassigned onto any open seat.</li>
       <li><b>🔀 Randomize / Reshuffle:</b> fills every unlocked seat with unlocked students, starting from the front row (bottom of the layout) and working back.</li>
-      <li><b>Alternate gender</b> checkbox: interleaves boy/girl in seat order instead of pure random.</li>
+      <li><b>Order</b> dropdown controls how students get placed: Random (default), or Alphabetical by first/last name — great for a simple, predictable seating chart instead of a shuffle.</li>
+      <li><b>Alternate gender</b> checkbox: interleaves boy/girl in seat order instead of pure random. Only applies when Order is set to Random.</li>
       <li><b>Clear Seats:</b> sends everyone back to Unassigned (does not touch desks).</li>
     </ul>
 
@@ -561,6 +578,8 @@
 
     <h3>Exporting</h3>
     <p>📄 Export PDF snapshots the current layout (in landscape) with the class name, your teacher name (if set), and the date/time as the header — ready to print and post by the door. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version.</p>
+
+    <p>🧹 <b>Clean View</b> hides all the ⋮/↻/🔒/undo icons on screen (great when arranging groups — all those buttons can get visually busy) without turning off dragging or seating — you can still place students while it's on. Toggle it off to get the icons back.</p>
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
@@ -602,17 +621,33 @@ let selectedDeskIds = new Set();
 let teacherName = '';
 
 function loadTeacherName(){
+  try{
+    const cached = localStorage.getItem('scm_teacherName');
+    if(cached){
+      teacherName = cached;
+      const input = document.getElementById('teacherNameInput');
+      if(input) input.value = cached;
+    }
+  }catch(e){}
   db.ref(`${ROOT}/settings/teacherName`).on('value', snap=>{
-    teacherName = snap.val() || '';
-    const input = document.getElementById('teacherNameInput');
-    if(document.activeElement !== input) input.value = teacherName;
+    const val = snap.val();
+    if(val !== null && val !== undefined){
+      teacherName = val;
+      const input = document.getElementById('teacherNameInput');
+      if(document.activeElement !== input) input.value = val;
+    }
+  }, err=>{
+    console.error('Teacher name failed to load from Firebase (check that "settings" is allowed in your database rules):', err);
   });
 }
 
 function saveTeacherName(){
   const val = document.getElementById('teacherNameInput').value.trim();
   teacherName = val;
-  db.ref(`${ROOT}/settings/teacherName`).set(val);
+  try{ localStorage.setItem('scm_teacherName', val); }catch(e){}
+  db.ref(`${ROOT}/settings/teacherName`).set(val).catch(err=>{
+    console.error('Teacher name failed to save to Firebase (check that "settings" is allowed in your database rules):', err);
+  });
 }
 
 function saveTeacherNameWithStatus(){
@@ -913,6 +948,14 @@ function toggleArrange(){
   render();
 }
 
+function toggleCleanView(){
+  const room = document.getElementById('room');
+  const isClean = room.classList.toggle('cleanView');
+  const btn = document.getElementById('cleanViewBtn');
+  btn.textContent = `🧹 Clean View: ${isClean ? 'On' : 'Off'}`;
+  btn.classList.toggle('active', isClean);
+}
+
 function toggleSelectMode(){
   selectMode = !selectMode;
   const btn = document.getElementById('selectModeBtn');
@@ -967,7 +1010,13 @@ function randomizeAll(){
   if(!currentClassId) return;
   if(Object.keys(layout).length === 0){ alert('Generate or add desks first.'); return; }
 
-  const alternate = document.getElementById('alternateGenderToggle').checked;
+  const placementOrder = document.getElementById('placementOrderSelect') ? document.getElementById('placementOrderSelect').value : 'random';
+  const alternate = placementOrder === 'random' && document.getElementById('alternateGenderToggle').checked;
+
+  const lastNameOf = (name)=>{
+    const parts = (name || '').trim().split(/\s+/);
+    return parts[parts.length - 1] || '';
+  };
 
   // Seats in "front of room first" order: bottom row (highest y) first, left-to-right within a row
   const deskEntries = Object.entries(layout).sort((a,b)=>{
@@ -995,7 +1044,11 @@ function randomizeAll(){
   const pool = Object.keys(roster).filter(id => !lockedStudentIds.has(id));
 
   let ordered;
-  if(alternate){
+  if(placementOrder === 'alphaFirst'){
+    ordered = [...pool].sort((a,b)=> roster[a].name.localeCompare(roster[b].name, undefined, {sensitivity:'base'}));
+  } else if(placementOrder === 'alphaLast'){
+    ordered = [...pool].sort((a,b)=> lastNameOf(roster[a].name).localeCompare(lastNameOf(roster[b].name), undefined, {sensitivity:'base'}));
+  } else if(alternate){
     const groups = {};
     pool.forEach(id=>{
       const g = roster[id].gender || 'unspecified';
