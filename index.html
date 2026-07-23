@@ -175,19 +175,22 @@
     cursor:grabbing;
     z-index:50;
   }
-  .seat{
+ .seat{
     width:80px;
     min-height:50px;
     background:#fdfdfd;
     border:1.5px dashed var(--dark-gray-border);
-    border-radius:6px; /* Kept rounded */
+    border-radius:6px;
     display:flex;
     align-items:center;
     justify-content:center;
     text-align:center;
-    font-size:11.5px;
-    font-weight:700;
-    padding:3px;
+    /* Clean, highly legible font settings */
+    font-family: Verdana, Geneva, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.25;
+    padding:4px;
     cursor:grab;
     z-index:1;
   }
@@ -197,23 +200,22 @@
     border-style: solid;
     border-color: var(--dark-gray-border);
     background: #ffffff;
-    color: var(--text);
+    color: #111827; /* Dark gray text */
   }
 
-  /* Boys: Faded Red (Soft Warm Coral) */
+  /* Boys: Faded Red (Soft Warm Coral) with Dark Text */
   .seat.filled.male {
     background-color: #fcf0f0;
     border-color: #e5b3b3;
-    color: #a83232;
+    color: #111827;
   }
 
-  /* Girls: Faded Purple (Soft Lavender) */
+  /* Girls: Faded Purple (Soft Lavender) with Dark Text */
   .seat.filled.female {
     background-color: #f6f0fa;
     border-color: #d1beea;
-    color: #6b3ba7;
+    color: #111827;
   }
-
   .seat.empty{
     color:var(--muted);
     font-weight:600;
