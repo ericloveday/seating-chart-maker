@@ -297,13 +297,6 @@
     font-weight:600;
   }
   #room.printing .lockIcon{display:none;}
-  #room.cleanView .deskIcons{display:none;}
-  #room.cleanView .lockIcon{display:none;}
-  #room.cleanView .removeSeatIcon{display:none;}
-  #room.cleanView .seat.locked{
-    border-color:var(--red);
-    background:#fff;
-  }
   .desk{position:absolute;}
   .deskInner{position:relative;display:flex;gap:4px;}
   #sidebar{
@@ -422,31 +415,34 @@
 </header>
 
 <div class="toolbar">
-  <!-- 1. Teacher Name section moved here -->
-  <div class="group">
-    <label>Teacher Name</label>
-    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" oninput="saveTeacherName()" onchange="saveTeacherNameWithStatus()">
-  </div>
-
-  <!-- 2. Class section moved here -->
   <div class="group">
     <label>Class</label>
     <select id="classSelect"></select>
     <button class="secondary" onclick="openNewClassModal()">+ New Class</button>
     <button class="secondary" onclick="deleteClass()">Delete Class</button>
   </div>
-  
-  <!-- The rest of your toolbar groups remain the same below -->
+
   <div class="group">
+    <label>Teacher Name</label>
+    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" oninput="saveTeacherName()" onchange="saveTeacherNameWithStatus()">
+  </div>
+
+  <div class="group" data-mode="always">
+    <label>View</label>
+    <button class="toggle" id="modeCleanBtn" onclick="setViewMode('clean')">👁 Clean View</button>
+    <button class="toggle" id="modeLayoutBtn" onclick="setViewMode('editLayout')">📐 Edit Layout</button>
+    <button class="toggle" id="modeStudentsBtn" onclick="setViewMode('editStudents')">🧑‍🤝‍🧑 Edit Students</button>
+  </div>
+
+  <div class="group" data-mode="students">
     <label>Roster</label>
-    <!-- ... -->
     <button class="secondary" onclick="document.getElementById('csvInput').click()">Upload CSV</button>
     <button class="secondary" onclick="clearRoster()">Clear Roster</button>
     <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleCSV(event)">
     <span style="font-size:11px;color:var(--muted);max-width:220px;">Format: Last, First, Gender(M/F) — one student per line. A header row is fine, it's skipped automatically. Uploading adds to the current roster — click Clear Roster first to fully replace it.</span>
   </div>
 
-  <div class="group">
+  <div class="group" data-mode="layout">
     <label>Saved Layout</label>
     <select id="templateSelect"><option value="">-- choose template --</option></select>
     <button onclick="applyTemplate()">Apply</button>
@@ -454,7 +450,7 @@
     <button class="secondary" onclick="deleteTemplate()">Delete</button>
   </div>
 
-  <div class="group">
+  <div class="group" data-mode="layout">
     <label>Quick Grid</label>
     <input type="number" id="rowsInput" min="1" max="12" value="3"> ×
     <input type="number" id="colsInput" min="1" max="12" value="5">
@@ -463,14 +459,16 @@
       <option value="2" selected>2 seats/desk (lab table)</option>
     </select>
     <button onclick="generateGrid()">Generate</button>
-  </div>
-
-  <div class="group">
-    <button class="toggle" id="arrangeBtn" onclick="toggleArrange()">Arrange Desks: Off</button>
     <button class="secondary" onclick="addDesk()">+ Add Desk</button>
   </div>
 
-  <div class="group">
+  <div class="group" data-mode="layout">
+    <button class="toggle" id="selectModeBtn" onclick="toggleSelectMode()">Select Tables: Off</button>
+    <button class="secondary" onclick="duplicateSelected()">Duplicate Selected</button>
+    <button class="secondary" onclick="clearSelection()">Clear Selection</button>
+  </div>
+
+  <div class="group" data-mode="students">
     <label>Shuffle</label>
     <button onclick="randomizeAll()">📌 Place Students</button>
     <select id="placementOrderSelect" style="font-size:12px;">
@@ -484,21 +482,11 @@
     <button class="secondary" onclick="clearSeats()">Clear Seats</button>
   </div>
 
-  <div class="group">
+  <div class="group" data-mode="always">
     <button class="secondary" onclick="exportPDF()">📄 Export PDF</button>
   </div>
-  
-<div class="group">
-    <button class="toggle" id="selectModeBtn" onclick="toggleSelectMode()">Select Tables: Off</button>
-    <button class="secondary" onclick="duplicateSelected()">Duplicate Selected</button>
-    <button class="secondary" onclick="clearSelection()">Clear Selection</button>
-  </div>
 
-  <div class="group">
-    <button class="toggle" id="cleanViewBtn" onclick="toggleCleanView()">🧹 Clean View: Off</button>
-  </div>
-
-  <div class="group">
+  <div class="group" data-mode="always">
     <button class="secondary" onclick="openHelpModal()">❓ Cheat Sheet</button>
   </div>
 </div>
@@ -507,7 +495,7 @@
   <div id="roomWrap">
     <div id="roomHeader">
       <h2 id="roomTitle">No class selected</h2>
-      <span style="font-size:12px;color:var(--muted)">Empty desks can be dragged into place directly. Once a desk has a student, toggle "Arrange Desks" to reposition it. Click × to remove a table, 🔒 to lock a student in place, the undo arrow to send them back to Unassigned.</span>
+      <span style="font-size:12px;color:var(--muted)">Three modes above: <b>Clean View</b> for a tidy look with no editing, <b>Edit Layout</b> to add/move/rotate/remove tables, <b>Edit Students</b> to place, drag, lock, and unlock students.</span>
     </div>
     <div id="room"></div>
   </div>
@@ -556,11 +544,18 @@
       <li><b>Clear Roster</b> removes every student from the current class at once (and clears seating too) — handy before uploading a whole new roster, since CSV upload only <i>adds</i> students rather than replacing the list.</li>
     </ul>
 
-    <h3>Building desks</h3>
+    <h3>Three Views</h3>
+    <p>The room has three modes, switched at the top of the toolbar:</p>
+    <ul>
+      <li><b>👁 Clean View</b> (the default) — a tidy, read-only look at the chart. No icons, no dragging — great for just glancing at the layout or before printing.</li>
+      <li><b>📐 Edit Layout</b> — shows only the table-editing tools (Quick Grid, + Add Desk, Saved Layouts, Select Tables/Duplicate). Every table is freely draggable in this mode, and each table shows a rotate (↻) and remove (×) icon.</li>
+      <li><b>🧑‍🤝‍🧑 Edit Students</b> — shows only the student tools (Roster, Place Students/Order, Clear Seats). Tables are fixed in place, but each filled seat shows lock/unlock and undo icons, and you can drag students from Unassigned onto open seats.</li>
+    </ul>
+
+    <h3>Building desks (Edit Layout mode)</h3>
     <ul>
       <li><b>Quick Grid:</b> pick rows × columns and seats-per-desk (1 = individual desks, 2 = lab tables), then Generate. This replaces the current layout and clears seating — use it when starting fresh, not for daily reshuffling.</li>
-      <li><b>+ Add Desk:</b> adds one single desk. It's draggable immediately, even before anyone sits there.</li>
-      <li>Once a desk has a student in it, drag it via the <b>Arrange Desks: On</b> toggle instead (this avoids conflicting with dragging the student).</li>
+      <li><b>+ Add Desk:</b> adds one single desk, draggable immediately.</li>
       <li>Click the × on any desk to remove that table (any seated student returns to Unassigned).</li>
       <li>Click the rotate icon (↻) to turn a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
       <li><b>Select Tables: On</b> lets you click tables to select them (blue outline). Drag any selected table and the whole selected group moves together, keeping their arrangement. <b>Duplicate Selected</b> clones the whole selected group — same layout, same rotations — placed just to the right, and auto-selects the copies so you can keep duplicating to build a row of matching groups fast. <b>Clear Selection</b> deselects everything.</li>
@@ -569,7 +564,7 @@
     <h3>Saved Layouts (Rows / Groups / etc.)</h3>
     <p>Build a layout once, then <b>Save Current As...</b> and name it (e.g. "Rows" or "Lab Tables"). Later, pick it from the Saved Layout dropdown and click <b>Apply</b> to drop that same layout into any of your 6 classes. Applying a layout clears current seating for that class. Pick a layout and click <b>Delete</b> to remove it from the list permanently — this only deletes the saved template, not any class currently using that arrangement.</p>
 
-    <h3>Seating students</h3>
+    <h3>Seating students (Edit Students mode)</h3>
     <ul>
       <li>Drag a student chip from Unassigned onto any open seat.</li>
       <li><b>📌 Place Students:</b> fills every unlocked seat with unlocked students, using whatever's chosen in the <b>Order</b> dropdown, starting from the front row (bottom of the layout) and working back.</li>
@@ -578,7 +573,7 @@
       <li><b>Clear Seats:</b> sends everyone back to Unassigned (does not touch desks).</li>
     </ul>
 
-    <h3>Seat icons</h3>
+    <h3>Seat icons (visible in Edit Students mode)</h3>
     <ul>
       <li><b>🔒 / 🔓</b> (bottom-right of a filled seat): click to lock/unlock that student. Locked students are skipped by Randomize/Reshuffle and protected from drag-and-drop.</li>
       <li>The <b>undo arrow</b> (top-left of a filled seat): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
@@ -589,9 +584,7 @@
     </div>
 
     <h3>Exporting</h3>
-    <p>📄 Export PDF captures the current layout and automatically picks whichever page orientation prints it biggest — landscape as-is, or rotated 90° onto portrait — whichever fills more of the sheet for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version.</p>
-
-    <p>🧹 <b>Clean View</b> hides all the ⋮/↻/🔒/undo icons on screen (great when arranging groups — all those buttons can get visually busy) without turning off dragging or seating — you can still place students while it's on. Toggle it off to get the icons back.</p>
+    <p>📄 Export PDF captures the current layout and automatically picks whichever page orientation prints it biggest — landscape as-is, or rotated 90° onto portrait — whichever fills more of the sheet for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version. Export PDF works from any of the three view modes.</p>
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
@@ -627,7 +620,7 @@ let layout = {};
 let seating = {};
 let locks = {};
 let templates = {};
-let arrangeMode = false;
+let viewMode = 'clean'; // 'clean' | 'editLayout' | 'editStudents'
 let selectMode = false;
 let selectedDeskIds = new Set();
 let teacherName = '';
@@ -952,20 +945,26 @@ function editCapacity(deskId){
   });
 }
 
-function toggleArrange(){
-  arrangeMode = !arrangeMode;
-  const btn = document.getElementById('arrangeBtn');
-  btn.textContent = `Arrange Desks: ${arrangeMode ? 'On' : 'Off'}`;
-  btn.classList.toggle('active', arrangeMode);
-  render();
-}
+function setViewMode(mode){
+  viewMode = mode;
+  if(mode !== 'editLayout'){
+    selectMode = false;
+    selectedDeskIds.clear();
+  }
 
-function toggleCleanView(){
-  const room = document.getElementById('room');
-  const isClean = room.classList.toggle('cleanView');
-  const btn = document.getElementById('cleanViewBtn');
-  btn.textContent = `🧹 Clean View: ${isClean ? 'On' : 'Off'}`;
-  btn.classList.toggle('active', isClean);
+  document.getElementById('modeCleanBtn').classList.toggle('active', mode === 'clean');
+  document.getElementById('modeLayoutBtn').classList.toggle('active', mode === 'editLayout');
+  document.getElementById('modeStudentsBtn').classList.toggle('active', mode === 'editStudents');
+
+  document.querySelectorAll('.toolbar .group[data-mode]').forEach(group=>{
+    const groupMode = group.dataset.mode;
+    const visible = groupMode === 'always' ||
+      (groupMode === 'layout' && mode === 'editLayout') ||
+      (groupMode === 'students' && mode === 'editStudents');
+    group.style.display = visible ? 'flex' : 'none';
+  });
+
+  render();
 }
 
 function toggleSelectMode(){
@@ -1182,28 +1181,32 @@ function render(){
     const deskHasStudent = Object.values(seating[deskId] || {}).some(sid => !!sid);
     const desk = document.createElement('div');
     const isSelected = selectedDeskIds.has(deskId);
-    desk.className = 'desk' + (arrangeMode ? ' arrangeMode' : '') + (capacity === 1 ? ' single' : '') + (!deskHasStudent ? ' movable' : '') + (selectMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
+    const editingLayout = viewMode === 'editLayout';
+    const editingStudents = viewMode === 'editStudents';
+    desk.className = 'desk' + (editingLayout ? ' arrangeMode' : '') + (capacity === 1 ? ' single' : '') + (editingLayout ? ' movable' : '') + (selectMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
     desk.dataset.deskId = deskId;
     desk.style.left = pos.x + 'px';
     desk.style.top = pos.y + 'px';
 
-    const icons = document.createElement('div');
-    icons.className = 'deskIcons';
-    const rotateBtn = document.createElement('span');
-    rotateBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08a6.003 6.003 0 01-5.65 4c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L14 11h7V4l-3.35 2.35z"/></svg>';
-    rotateBtn.title = 'Rotate this table 90°';
-    rotateBtn.onclick = (e)=>{ e.stopPropagation(); rotateDesk(deskId); };
-    const remove = document.createElement('span');
-    remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
-    remove.title = 'Remove this table';
-    remove.onclick = (e)=>{
-      e.stopPropagation();
-      if(!confirm('Remove this table? Any student seated there will move back to Unassigned.')) return;
-      removeDesk(deskId);
-    };
-    icons.appendChild(rotateBtn);
-    icons.appendChild(remove);
-    desk.appendChild(icons);
+    if(editingLayout){
+      const icons = document.createElement('div');
+      icons.className = 'deskIcons';
+      const rotateBtn = document.createElement('span');
+      rotateBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08a6.003 6.003 0 01-5.65 4c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L14 11h7V4l-3.35 2.35z"/></svg>';
+      rotateBtn.title = 'Rotate this table 90°';
+      rotateBtn.onclick = (e)=>{ e.stopPropagation(); rotateDesk(deskId); };
+      const remove = document.createElement('span');
+      remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
+      remove.title = 'Remove this table';
+      remove.onclick = (e)=>{
+        e.stopPropagation();
+        if(!confirm('Remove this table? Any student seated there will move back to Unassigned.')) return;
+        removeDesk(deskId);
+      };
+      icons.appendChild(rotateBtn);
+      icons.appendChild(remove);
+      desk.appendChild(icons);
+    }
 
     const rotation = pos.rotation || 0;
     desk.style.transform = `rotate(${rotation}deg)`;
@@ -1217,14 +1220,14 @@ function render(){
 
       const label = document.createElement('span');
       label.textContent = studentId && roster[studentId] ? roster[studentId].name : 'Empty';
-      if(studentId){
+      if(studentId && editingStudents){
         label.style.cursor = 'pointer';
         label.title = 'Click to rename this student';
         label.onclick = (e)=>{ e.stopPropagation(); renameStudent(studentId); };
       }
       seat.appendChild(label);
 
-      if(studentId && !arrangeMode){
+      if(studentId && editingStudents){
         const lockIcon = document.createElement('span');
         lockIcon.className = 'lockIcon';
         lockIcon.textContent = isLocked ? '🔒' : '🔓';
@@ -1242,7 +1245,7 @@ function render(){
         }
       }
 
-      if(!arrangeMode && !isLocked && !selectMode){
+      if(editingStudents && !isLocked){
         seat.ondragover = (e)=>{ e.preventDefault(); seat.classList.add('dropTarget'); };
         seat.ondragleave = ()=> seat.classList.remove('dropTarget');
         seat.ondrop = (e)=> dropOnSeat(e, deskId, i);
@@ -1258,7 +1261,7 @@ function render(){
       desk.appendChild(seat);
     }
 
-    if(arrangeMode || !deskHasStudent || selectMode){
+    if(editingLayout){
       desk.onmousedown = (e)=> startDeskDrag(e, deskId, desk);
     }
 
@@ -1479,6 +1482,7 @@ function exportPDF(){
 loadClassList();
 loadTemplateList();
 loadTeacherName();
+setViewMode('clean');
 </script>
 </body>
 </html>
