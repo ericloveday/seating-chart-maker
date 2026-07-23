@@ -415,11 +415,6 @@
 </header>
 
 <div class="toolbar">
- <div class="group">
-    <label>Teacher Name</label>
-    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" oninput="saveTeacherName()" onchange="saveTeacherNameWithStatus()">
-  </div>
-  
   <div class="group">
     <label>Class</label>
     <select id="classSelect"></select>
@@ -427,11 +422,16 @@
     <button class="secondary" onclick="deleteClass()">Delete Class</button>
   </div>
 
+  <div class="group">
+    <label>Teacher Name</label>
+    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" oninput="saveTeacherName()" onchange="saveTeacherNameWithStatus()">
+  </div>
+
   <div class="group" data-mode="always">
     <label>View</label>
     <button class="toggle" id="modeCleanBtn" onclick="setViewMode('clean')">👁 Clean View</button>
-    <button class="toggle" id="modeStudentsBtn" onclick="setViewMode('editStudents')">🧑‍🤝‍🧑 Edit Students</button>
     <button class="toggle" id="modeLayoutBtn" onclick="setViewMode('editLayout')">📐 Edit Layout</button>
+    <button class="toggle" id="modeStudentsBtn" onclick="setViewMode('editStudents')">🧑‍🤝‍🧑 Edit Students</button>
   </div>
 
   <div class="group" data-mode="students">
@@ -460,6 +460,7 @@
     </select>
     <button onclick="generateGrid()">Generate</button>
     <button class="secondary" onclick="addDesk()">+ Add Desk</button>
+    <button class="secondary" onclick="clearLayout()">Clear Layout</button>
   </div>
 
   <div class="group" data-mode="layout">
@@ -554,7 +555,8 @@
 
     <h3>Building desks (Edit Layout mode)</h3>
     <ul>
-      <li><b>Quick Grid:</b> pick rows × columns and seats-per-desk (1 = individual desks, 2 = lab tables), then Generate. This replaces the current layout and clears seating — use it when starting fresh, not for daily reshuffling.</li>
+      <li><b>Quick Grid:</b> pick rows × columns and seats-per-desk (1 = individual desks, 2 = lab tables), then Generate. This replaces the current layout and clears seating — but never touches your roster, so switching a class from Rows to Groups (or vice versa) is just Generate with new settings.</li>
+      <li><b>Clear Layout</b> removes every table from the class at once (students return to Unassigned, roster stays intact) — handy when you want to build a custom arrangement from scratch with + Add Desk instead of using Quick Grid.</li>
       <li><b>+ Add Desk:</b> adds one single desk, draggable immediately.</li>
       <li>Click the × on any desk to remove that table (any seated student returns to Unassigned).</li>
       <li>Click the rotate icon (↻) to turn a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
@@ -924,6 +926,17 @@ function addDesk(){
 function removeDesk(deskId){
   db.ref(`${ROOT}/layouts/${currentClassId}/${deskId}`).remove();
   db.ref(`${ROOT}/seating/${currentClassId}/${deskId}`).remove();
+}
+
+function clearLayout(){
+  if(!currentClassId){ alert('Select or create a class first.'); return; }
+  const count = Object.keys(layout).length;
+  if(count === 0){ alert('This class has no tables yet.'); return; }
+  if(!confirm(`Remove all ${count} tables from this class? Students stay in the roster and simply return to Unassigned. This can't be undone.`)) return;
+  db.ref(`${ROOT}/layouts/${currentClassId}`).remove();
+  db.ref(`${ROOT}/seating/${currentClassId}`).remove();
+  db.ref(`${ROOT}/locks/${currentClassId}`).remove();
+  setStatus('Layout cleared');
 }
 
 function rotateDesk(deskId){
