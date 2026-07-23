@@ -1,1619 +1,312 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Seating Chart Maker</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<style>
-  :root{
-    --red:#ce1f07;
-    --red-dark:#a31905;
-    --dark-gray:#808080;
-    --dark-gray-border:#cccccc; /* Subtle, clean gray for borders */
-    --bg:#f4f5f7;
-    --card:#ffffff;
-    --border:#dfe2e6;
-    --text:#222;
-    --muted:#6b7280;
-  }
-  *{box-sizing:border-box;}
-  body{
-    font-family:'Montserrat',sans-serif;
-    margin:0;
-    background:var(--bg);
-    color:var(--text);
-  }
-  header{
-    background:var(--red);
-    color:#fff;
-    padding:14px 20px;
-    display:flex;
-    align-items:center;
-    justify-content:space-between;
-    flex-wrap:wrap;
-    gap:10px;
-  }
-  header h1{
-    font-size:20px;
-    font-weight:800;
-    margin:0;
-    letter-spacing:.5px;
-  }
-  #saveStatus{
-    font-size:12px;
-    font-weight:600;
-    opacity:.9;
-  }
-  .toolbar{
-    background:var(--card);
-    border-bottom:1px solid var(--border);
-    padding:10px 20px;
-    display:flex;
-    flex-wrap:wrap;
-    gap:14px;
-    align-items:center;
-  }
-  .toolbar .group{
-    display:flex;
-    align-items:center;
-    gap:6px;
-    padding:6px 10px;
-    background:#fafafa;
-    border:1px solid var(--border);
-    border-radius:8px;
-    flex-wrap:wrap;
-  }
-  .toolbar label{
-    font-size:12px;
-    font-weight:600;
-    color:var(--muted);
-  }
-  select, input[type=number], input[type=text]{
-    font-family:'Montserrat',sans-serif;
-    padding:6px 8px;
-    border:1px solid var(--border);
-    border-radius:6px;
-    font-size:13px;
-  }
-  input[type=number]{width:55px;}
-  button{
-    font-family:'Montserrat',sans-serif;
-    font-weight:700;
-    font-size:13px;
-    padding:8px 14px;
-    border:none;
-    border-radius:6px;
-    background:var(--red);
-    color:#fff;
-    cursor:pointer;
-    transition:background .15s;
-    white-space:nowrap;
-  }
-  button:hover{background:var(--red-dark);}
-  button.secondary{
-    background:#fff;
-    color:var(--red);
-    border:1.5px solid var(--red);
-  }
-  button.secondary:hover{background:#fdeceb;}
-  button.toggle.active{
-    background:var(--red-dark);
-    box-shadow:inset 0 0 0 2px #fff;
-  }
-  #app{
-    display:flex;
-    gap:16px;
-    padding:16px 20px;
-    align-items:flex-start;
-  }
-  #roomWrap{
-    flex:1;
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:10px;
-    padding:14px;
-    min-height:520px;
-  }
-  #roomHeader{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin-bottom:10px;
-    flex-wrap:wrap;
-    gap:6px;
-  }
-  #roomHeader h2{
-    font-size:15px;
-    margin:0;
-    color:var(--muted);
-  }
-  #room{
-    position:relative;
-    width:100%;
-    height:460px;
-    background:
-      linear-gradient(0deg, transparent 24px, rgba(0,0,0,.03) 25px),
-      linear-gradient(90deg, transparent 24px, rgba(0,0,0,.03) 25px);
-    background-size:25px 25px;
-    border:2px dashed var(--border);
-    border-radius:8px;
-    overflow:auto;
-  }
-  .desk{
-    position:absolute;
-    min-height:62px;
-    background:#fff;
-    border:1.5px solid var(--dark-gray-border);
-    border-radius:0px; /* Square corners for tables */
-    display:flex;
-    align-items:stretch;
-    padding:4px;
-    user-select:none;
-    box-shadow:0 1px 3px rgba(0,0,0,.08);
-    gap:4px;
-  }
-  .desk.arrangeMode{
-    cursor:grab;
-  }
-  .desk.selected{
-    box-shadow:0 0 0 3px #2563eb, 0 1px 3px rgba(0,0,0,.08);
-  }
-  .desk.selectable{
-    cursor:pointer;
-  }
-  .desk.movable{
-    cursor:grab;
-  }
-  .desk.dragging{
-    opacity:.6;
-    cursor:grabbing;
-    z-index:50;
-  }
- .seat{
-    width:80px;
-    min-height:50px;
-    background:#fdfdfd;
-    border:1.5px dashed var(--dark-gray-border);
-    border-radius:6px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    text-align:center;
-    /* Clean, highly legible font settings */
-    font-family: Verdana, Geneva, sans-serif;
-    font-size: 14px;
-    font-weight: 450;
-    line-height: 1.25;
-    padding:4px;
-    cursor:grab;
-    z-index:1;
-  }
-  
-  /* Filled Seat Base Style */
-  .seat.filled {
-    border-style: solid;
-    border-color: var(--dark-gray-border);
-    background: #ffffff;
-    color: #111827; /* Dark gray text */
-  }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Seating Chart Maker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    :root {
+      --primary: #c82333;
+      --primary-hover: #b21f2d;
+      --bg: #f4f5f7;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --dark-gray-border: #888;
+      --text: #2d3748;
+      --seat-bg: #ffffff;
+    }
 
-  /* Boys: Faded Red (Soft Warm Coral) with Dark Text */
-  .seat.filled.male {
-    background-color: #fcf0f0;
-    border-color: #e5b3b3;
-    color: #111827;
-  }
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
 
-  /* Girls: Faded Purple (Soft Lavender) with Dark Text */
-  .seat.filled.female {
-    background-color: #f6f0fa;
-    border-color: #d1beea;
-    color: #111827;
-  }
-  .seat.empty{
-    color:var(--muted);
-    font-weight:600;
-    font-style:italic;
-    cursor:default;
-    border-color:var(--dark-gray-border);
-  }
-  .seat.dropTarget{
-    background:#e5e7eb;
-    box-shadow:0 0 0 3px var(--dark-gray-border);
-  }
-  .seat.locked{
-    border-color:#d4a017 !important;
-    background:#fff9e8 !important;
-    color:#856404 !important;
-    cursor:default;
-  }
-  .desk.single{
-    padding:0;
-    border:none;
-    background:transparent;
-    box-shadow:none;
-  }
-  .lockIcon{
-    position:absolute;
-    bottom:-10px;
-    right:-8px;
-    font-size:18px;
-    cursor:pointer;
-    background:#fff;
-    border-radius:50%;
-    line-height:1;
-    padding:2px;
-  }
-  .removeSeatIcon{
-    position:absolute;
-    top:-10px;
-    left:-8px;
-    width:22px;
-    height:22px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    cursor:pointer;
-    background:var(--red);
-    border-radius:50%;
-    box-shadow:0 1px 3px rgba(0,0,0,.25);
-  }
-  .removeSeatIcon:hover{
-    background:var(--red-dark);
-  }
-  .removeSeatIcon svg{
-    width:13px;
-    height:13px;
-    fill:#fff;
-  }
-  #room.printing .removeSeatIcon{display:none;}
-  .deskIcons{
-    position:absolute;
-    top:-13px;
-    right:-13px;
-    display:flex;
-    gap:3px;
-    z-index:10;
-  }
-  .deskIcons span{
-    width:24px;
-    height:24px;
-    border-radius:50%;
-    background:#333;
-    color:#fff;
-    font-size:14px;
-    line-height:24px;
-    text-align:center;
-    cursor:pointer;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    box-shadow:0 1px 3px rgba(0,0,0,.25);
-  }
-  .deskIcons span:hover{
-    background:#000;
-  }
-  .deskIcons span svg{
-    width:12px;
-    height:12px;
-    fill:#fff;
-  }
-  .deskIcons span.gear{background:#555;}
-  #room.printing .seat.locked{
-    border-color:var(--dark-gray-border) !important;
-    background:#fff !important;
-    color:var(--text) !important;
-  }
-  #room.printing .deskIcons{display:none;}
-  #room.printing .seat{cursor:default;}
-  #room.printing .seat{
-    font-size:15px;
-    font-weight:800;
-  }
-  #room.printing .seat.empty{
-    font-size:13px;
-    font-weight:600;
-  }
-  #room.printing .lockIcon{display:none;}
-  .desk{position:absolute;}
-  .deskInner{position:relative;display:flex;gap:4px;}
-  #sidebar{
-    width:250px;
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:10px;
-    padding:14px;
-  }
-  #sidebar h2{
-    font-size:15px;
-    margin:0 0 10px 0;
-    color:var(--muted);
-  }
-  #addStudentRow{
-    display:flex;
-    gap:6px;
-    margin-bottom:10px;
-  }
-  #addStudentRow input{flex:1;}
-  #unassignedList{
-    display:flex;
-    flex-direction:column;
-    gap:6px;
-    max-height:420px;
-    overflow-y:auto;
-    min-height:60px;
-    padding:6px;
-    border:1px dashed var(--border);
-    border-radius:8px;
-  }
-  #unassignedList.dropTarget{
-    background:#fdeceb;
-  }
-  .chip{
-    background:#fff;
-    border:1.5px solid var(--dark-gray-border);
-    color:var(--text);
-    border-radius:6px;
-    padding:7px 10px;
-    font-size:13px;
-    font-weight:600;
-    cursor:grab;
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:6px;
-  }
-  .chip .del{
-    cursor:pointer;
-    color:#999;
-    font-weight:800;
-  }
-  .chip .del:hover{color:var(--red);}
-  #emptyMsg{
-    font-size:12px;
-    color:var(--muted);
-    text-align:center;
-    padding:10px;
-  }
-  .modalBg{
-    position:fixed;top:0;left:0;right:0;bottom:0;
-    background:rgba(0,0,0,.4);
-    display:none;
-    align-items:center;
-    justify-content:center;
-    z-index:100;
-  }
-  .modalBg.show{display:flex;}
-  .modal{
-    background:#fff;
-    border-radius:10px;
-    padding:20px;
-    width:320px;
-    box-shadow:0 8px 30px rgba(0,0,0,.2);
-  }
-  .modal h3{margin-top:0;font-size:16px;}
-  .modal input{width:100%;margin-bottom:12px;}
-  .modal .btnRow{display:flex;justify-content:flex-end;gap:8px;}
-  .helpModal{
-    width:600px;
-    max-width:90vw;
-    max-height:80vh;
-    overflow-y:auto;
-  }
-  .helpModal h3{
-    color:var(--red);
-    font-size:15px;
-    margin:18px 0 6px 0;
-  }
-  .helpModal h3:first-child{margin-top:0;}
-  .helpModal p, .helpModal li{
-    font-size:13px;
-    line-height:1.5;
-    color:var(--text);
-  }
-  .helpModal ul{
-    margin:4px 0 4px 18px;
-    padding:0;
-  }
-  .helpModal .tip{
-    background:#fdeceb;
-    border-left:3px solid var(--red);
-    padding:8px 10px;
-    border-radius:6px;
-    margin:8px 0;
-    font-size:13px;
-  }
-</style>
+    body {
+      margin: 0;
+      padding: 20px;
+      background-color: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      background: var(--card-bg);
+      padding: 15px 20px;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    h1 { margin: 0; font-size: 24px; color: var(--primary); }
+
+    .top-controls {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #f8fafc;
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    label { font-weight: 600; font-size: 14px; }
+
+    select, input[type="text"] {
+      padding: 6px 10px;
+      border: 1px solid #cbd5e0;
+      border-radius: 4px;
+      font-size: 14px;
+    }
+
+    button {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #edf2f7; color: #4a5568; }
+    .btn-secondary:hover { background: #e2e8f0; }
+    .btn-danger { background: #e53e3e; color: white; }
+    .btn-danger:hover { background: #c53030; }
+
+    .nav-btn {
+      background: #f8fafc;
+      border: 1px solid #cbd5e0;
+      color: #4a5568;
+    }
+    .nav-btn.active {
+      background: var(--primary);
+      color: white;
+      border-color: var(--primary);
+    }
+
+    .app-container {
+      display: flex;
+      gap: 20px;
+      height: calc(100vh - 120px);
+    }
+
+    .main-stage {
+      flex: 1;
+      background: var(--card-bg);
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .stage-header {
+      padding: 15px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .stage-header h2 { margin: 0 0 5px 0; font-size: 18px; }
+    .stage-header p { margin: 0; font-size: 13px; color: #718096; }
+
+    #grid-container {
+      flex: 1;
+      position: relative;
+      overflow: auto;
+      background-size: 20px 20px;
+      background-image:
+        linear-gradient(to right, #edf2f7 1px, transparent 1px),
+        linear-gradient(to bottom, #edf2f7 1px, transparent 1px);
+    }
+
+    .sidebar {
+      width: 300px;
+      background: var(--card-bg);
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .seat {
+      width: 80px;
+      min-height: 50px;
+      background: #fdfdfd;
+      border: 1.5px dashed var(--dark-gray-border);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-family: Verdana, Geneva, sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.25;
+      padding: 4px;
+      cursor: grab;
+      z-index: 1;
+    }
+    
+    .seat.filled {
+      border-style: solid;
+      border-color: var(--dark-gray-border);
+      background: #ffffff;
+      color: #111827;
+    }
+
+    .seat.filled.male {
+      background-color: #fcf0f0;
+      border-color: #e5b3b3;
+      color: #111827;
+    }
+
+    .seat.filled.female {
+      background-color: #f6f0fa;
+      border-color: #d1beea;
+      color: #111827;
+    }
+
+    .hidden { display: none !important; }
+
+    /* Modal styling */
+    .modal {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-content {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+  </style>
 </head>
 <body>
 
-<header>
-  <h1>Seating Chart Maker</h1>
-  <div id="saveStatus">Ready</div>
-</header>
+  <header>
+    <h1>Seating Chart Maker</h1>
+    
+    <div class="top-controls">
+      <div class="control-group">
+        <label for="teacherName">Teacher Name</label>
+        <input type="text" id="teacherName" placeholder="Loveday" />
+      </div>
 
-<div class="toolbar">
-   <div class="group">
-    <label>Teacher Name</label>
-    <input type="text" id="teacherNameInput" placeholder="e.g. Mr. Smith" style="width:140px;" oninput="saveTeacherName()" onchange="saveTeacherNameWithStatus()">
-  </div>
-  
-  <div class="group">
-    <label>Class</label>
-    <select id="classSelect"></select>
-    <button class="secondary" onclick="openNewClassModal()">+ New Class</button>
-    <button class="secondary" onclick="renameClass()">Rename Class</button>
-    <button class="secondary" onclick="deleteClass()">Delete Class</button>
-  </div>
+      <div class="control-group">
+        <label for="classSelect">Class</label>
+        <select id="classSelect"></select>
+        <button id="addClassBtn" class="btn-secondary">+ New Class</button>
+        <button id="renameClassBtn" class="btn-secondary">Rename Class</button>
+        <button id="deleteClassBtn" class="btn-danger">Delete Class</button>
+      </div>
 
-  <div class="group" data-mode="always">
-    <label>View</label>
-    <button class="toggle" id="modeCleanBtn" onclick="setViewMode('clean')">👁 Clean View</button>
-    <button class="toggle" id="modeStudentsBtn" onclick="setViewMode('editStudents')">🧑‍🤝‍🧑 Edit Students</button>
-    <button class="toggle" id="modeLayoutBtn" onclick="setViewMode('editLayout')">📐 Edit Layout</button>
-  </div>
+      <div class="control-group">
+        <button id="editStudentsBtn" class="nav-btn">✏️ Edit Students</button>
+        <button id="editLayoutBtn" class="nav-btn">📐 Edit Layout</button>
+        <button id="doneEditingBtn" class="nav-btn hidden">Done Editing</button>
+      </div>
 
-  <div class="group" data-mode="students">
-    <label>Roster</label>
-    <button class="secondary" onclick="document.getElementById('csvInput').click()">Upload CSV</button>
-    <button class="secondary" onclick="clearRoster()">Clear Roster</button>
-    <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleCSV(event)">
-    <span style="font-size:11px;color:var(--muted);max-width:220px;">Format: Last, First, Gender(M/F) — one student per line. A header row is fine, it's skipped automatically. Uploading adds to the current roster — click Clear Roster first to fully replace it.</span>
-  </div>
-
-  <div class="group" data-mode="layout">
-    <label>Saved Layout</label>
-    <select id="templateSelect"><option value="">-- choose template --</option></select>
-    <button onclick="applyTemplate()">Apply</button>
-    <button class="secondary" onclick="saveAsTemplate()">Save Current As...</button>
-    <button class="secondary" onclick="deleteTemplate()">Delete</button>
-  </div>
-
-  <div class="group" data-mode="layout">
-    <label>Quick Grid</label>
-    <input type="number" id="rowsInput" min="1" max="12" value="3"> ×
-    <input type="number" id="colsInput" min="1" max="12" value="5">
-    <select id="capacitySelect">
-      <option value="1">1 seat/desk</option>
-      <option value="2" selected>2 seats/desk (lab table)</option>
-    </select>
-    <button onclick="generateGrid()">Generate</button>
-    <button class="secondary" onclick="addDesk()">+ Add Desk</button>
-    <button class="secondary" onclick="clearLayout()">Clear Layout</button>
-  </div>
-
-  <div class="group" data-mode="layout">
-    <button class="toggle" id="selectModeBtn" onclick="toggleSelectMode()">Select Tables: Off</button>
-    <button class="secondary" onclick="duplicateSelected()">Duplicate Selected</button>
-    <button class="secondary" onclick="clearSelection()">Clear Selection</button>
-  </div>
-
-  <div class="group" data-mode="students">
-    <label>Shuffle</label>
-    <button onclick="randomizeAll()">📌 Place Students</button>
-    <select id="placementOrderSelect" style="font-size:12px;">
-      <option value="random">Order: Random</option>
-      <option value="alphaFirst">Order: Alphabetical (First Name)</option>
-      <option value="alphaLast">Order: Alphabetical (Last Name)</option>
-    </select>
-    <label style="display:flex;align-items:center;gap:4px;font-weight:600;">
-      <input type="checkbox" id="alternateGenderToggle" style="width:auto;" checked> Alternate gender
-    </label>
-    <button class="secondary" onclick="clearSeats()">Clear Seats</button>
-  </div>
-
-  <div class="group" data-mode="always">
-    <button class="secondary" onclick="exportPDF()">📄 Export PDF</button>
-  </div>
-
-  <div class="group" data-mode="always">
-    <button class="secondary" onclick="openHelpModal()">❓ Cheat Sheet</button>
-  </div>
-</div>
-
-<div id="app">
-  <div id="roomWrap">
-    <div id="roomHeader">
-      <h2 id="roomTitle">No class selected</h2>
-      <span style="font-size:12px;color:var(--muted)">Three modes above: <b>Clean View</b> for a tidy look with no editing, <b>Edit Layout</b> to add/move/rotate/remove tables, <b>Edit Students</b> to place, drag, lock, and unlock students.</span>
+      <div class="control-group">
+        <button id="exportPdfBtn" class="btn-secondary">📄 Export PDF</button>
+        <button id="cheatSheetBtn" class="btn-secondary">? Cheat Sheet</button>
+      </div>
     </div>
-    <div id="room"></div>
-  </div>
+  </header>
 
-  <div id="sidebar">
-    <h2>Unassigned Students</h2>
-    <div id="addStudentRow">
-      <input type="text" id="newStudentName" placeholder="Add student name">
-      <select id="newStudentGender" style="width:60px;">
-        <option value="">-</option>
-        <option value="M">M</option>
-        <option value="F">F</option>
-      </select>
-      <button onclick="addStudentManually()">+</button>
-    </div>
-    <div id="unassignedList" ondragover="event.preventDefault(); this.classList.add('dropTarget')"
-         ondragleave="this.classList.remove('dropTarget')"
-         ondrop="dropOnUnassigned(event)"></div>
-  </div>
-</div>
-
-<div class="modalBg" id="newClassModal">
-  <div class="modal">
-    <h3>New Class / Period</h3>
-    <input type="text" id="newClassName" placeholder="e.g. Period 3 - Science">
-    <div class="btnRow">
-      <button class="secondary" onclick="closeNewClassModal()">Cancel</button>
-      <button onclick="createNewClass()">Create</button>
-    </div>
-  </div>
-</div>
-
-<div class="modalBg" id="helpModal">
-  <div class="modal helpModal">
-    <h3 style="color:var(--text);font-size:18px;">How This App Works</h3>
-
-    <h3>Classes</h3>
-    <p>Create one entry per period (New Class). Each class has its own roster, desks, seating, and locks — switching the Class dropdown swaps everything at once. <b>Rename Class</b> lets you change a class's name anytime without touching its roster, layout, or seating. Set your <b>Teacher Name</b> once in the toolbar — it's saved automatically and appears on every printed PDF. <b>Delete Class</b> removes the selected class entirely, including its roster, desks, seating, and locks — this can't be undone.</p>
-
-    <h3>Adding students</h3>
-    <ul>
-      <li>Type a name and pick M/F/- (or leave blank), then click +.</li>
-      <li><b>CSV upload format:</b> <code>Last, First, Gender(M/F)</code> — one student per line. A header row (like "Last Name, First Name, Gender") is detected and skipped automatically.</li>
-      <li>Click the <b>(M)/(F)/(-)</b> badge on any unassigned student's chip to change their gender anytime.</li>
-      <li>Click a student's <b>name</b> (in the Unassigned list or in a seat) to rename them — renaming doesn't move or unseat them.</li>
-      <li><b>Clear Roster</b> removes every student from the current class at once (and clears seating too) — handy before uploading a whole new roster, since CSV upload only <i>adds</i> students rather than replacing the list.</li>
-    </ul>
-
-    <h3>Three Views</h3>
-    <p>The room has three modes, switched at the top of the toolbar:</p>
-    <ul>
-      <li><b>👁 Clean View</b> (the default) — a tidy, read-only look at the chart. No icons, no dragging — great for just glancing at the layout or before printing.</li>
-      <li><b>📐 Edit Layout</b> — shows only the table-editing tools (Quick Grid, + Add Desk, Saved Layouts, Select Tables/Duplicate). Every table is freely draggable in this mode, and each table shows a rotate (↻) and remove (×) icon.</li>
-      <li><b>🧑‍🤝‍🧑 Edit Students</b> — shows only the student tools (Roster, Place Students/Order, Clear Seats). Tables are fixed in place, but each filled seat shows lock/unlock and undo icons, and you can drag students from Unassigned onto open seats.</li>
-    </ul>
-
-    <h3>Building desks (Edit Layout mode)</h3>
-    <ul>
-      <li><b>Quick Grid:</b> pick rows × columns and seats-per-desk (1 = individual desks, 2 = lab tables), then Generate. This replaces the current layout and clears seating — but never touches your roster, so switching a class from Rows to Groups (or vice versa) is just Generate with new settings.</li>
-      <li><b>Clear Layout</b> removes every table from the class at once (students return to Unassigned, roster stays intact) — handy when you want to build a custom arrangement from scratch with + Add Desk instead of using Quick Grid.</li>
-      <li><b>+ Add Desk:</b> adds one single desk, draggable immediately.</li>
-      <li>Click the × on any desk to remove that table (any seated student returns to Unassigned).</li>
-      <li>Click the rotate icon (↻) to turn a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
-      <li><b>Select Tables: On</b> lets you click tables to select them (blue outline). Drag any selected table and the whole selected group moves together, keeping their arrangement. <b>Duplicate Selected</b> clones the whole selected group — same layout, same rotations — placed just to the right, and auto-selects the copies so you can keep duplicating to build a row of matching groups fast. <b>Clear Selection</b> deselects everything.</li>
-      <li>While dragging any table, a thin blue guide line appears whenever an edge or center lines up with another table — and the table snaps right into place, just like Canva or PowerPoint.</li>
-    </ul>
-
-    <h3>Saved Layouts (Rows / Groups / etc.)</h3>
-    <p>Build a layout once, then <b>Save Current As...</b> and name it (e.g. "Rows" or "Lab Tables"). Later, pick it from the Saved Layout dropdown and click <b>Apply</b> to drop that same layout into any of your 6 classes. Applying a layout clears current seating for that class. Pick a layout and click <b>Delete</b> to remove it from the list permanently — this only deletes the saved template, not any class currently using that arrangement.</p>
-
-    <h3>Seating students (Edit Students mode)</h3>
-    <ul>
-      <li>Drag a student chip from Unassigned onto any open seat.</li>
-      <li><b>📌 Place Students:</b> fills every unlocked seat with unlocked students, using whatever's chosen in the <b>Order</b> dropdown, starting from the front row (bottom of the layout) and working back.</li>
-      <li><b>Order</b> dropdown controls how students get placed: Random (default), or Alphabetical by first/last name — great for a simple, predictable seating chart instead of a shuffle.</li>
-      <li><b>Alternate gender</b> checkbox: interleaves boy/girl in seat order instead of pure random. Only applies when Order is set to Random.</li>
-      <li><b>Clear Seats:</b> sends everyone back to Unassigned (does not touch desks).</li>
-    </ul>
-
-    <h3>Seat icons (visible in Edit Students mode)</h3>
-    <ul>
-      <li><b>🔒 / 🔓</b> (bottom-right of a filled seat): click to lock/unlock that student. Locked students are skipped by Randomize/Reshuffle and protected from drag-and-drop.</li>
-      <li>The <b>undo arrow</b> (top-left of a filled seat): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
-    </ul>
-
-    <div class="tip">
-      <b>IEP / 504 seating:</b> place the student in the seat they need, click 🔒 to lock it, then hit 📌 Place Students as usual — everyone else fills in around them, and they'll stay locked in for future placements too. Locked students are also excluded from the "Alternate gender" calculation, so they won't throw off the balance.
+  <div class="app-container">
+    <div class="main-stage">
+      <div class="stage-header">
+        <h2 id="currentClassTitle">Core 1 Groups</h2>
+        <p id="modeInstruction">Select <strong>Edit Layout</strong> to rearrange tables or <strong>Edit Students</strong> to assign seating.</p>
+      </div>
+      <div id="grid-container"></div>
     </div>
 
-    <h3>Exporting</h3>
-    <p>📄 Export PDF captures the current layout and automatically picks whichever page orientation prints it biggest — landscape as-is, or rotated 90° onto portrait — whichever fills more of the sheet for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version. Export PDF works from any of the three view modes.</p>
-
-    <div class="btnRow">
-      <button onclick="closeHelpModal()">Got it</button>
+    <div class="sidebar">
+      <h3>Unassigned Students</h3>
+      <div class="control-group">
+        <input type="text" id="studentNameInput" placeholder="Add student name" />
+        <select id="studentGenderSelect">
+          <option value="-">-</option>
+          <option value="male">M</option>
+          <option value="female">F</option>
+        </select>
+      </div>
+      <div id="unassignedList"></div>
     </div>
   </div>
-</div>
 
-<script>
-/* ====== FIREBASE CONFIG - REPLACE WITH YOUR PROJECT CONFIG ====== */
-const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "bathroom-check-out.firebaseapp.com",
-  databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
-  projectId: "bathroom-check-out",
-  storageBucket: "bathroom-check-out.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const ROOT = "seatingCharts";
-
-/* ====== STATE ======
-  layout[deskId] = {x, y, capacity, rotation}
-  seating[deskId] = { "0": studentId, "1": studentId, ... }
-  roster[studentId] = {name, gender}
-  locks[deskId] = { "0": true, ... }   // locked seat slots for current class
-  layoutTemplates[templateId] = {name, desks: {deskId:{x,y,capacity,rotation}}}
-*/
-let currentClassId = null;
-let roster = {};
-let layout = {};
-let seating = {};
-let locks = {};
-let templates = {};
-let viewMode = 'clean'; // 'clean' | 'editLayout' | 'editStudents'
-let selectMode = false;
-let selectedDeskIds = new Set();
-let teacherName = '';
-
-function loadTeacherName(){
-  try{
-    const cached = localStorage.getItem('scm_teacherName');
-    if(cached){
-      teacherName = cached;
-      const input = document.getElementById('teacherNameInput');
-      if(input) input.value = cached;
-    }
-  }catch(e){}
-  db.ref(`${ROOT}/settings/teacherName`).on('value', snap=>{
-    const val = snap.val();
-    if(val !== null && val !== undefined){
-      teacherName = val;
-      const input = document.getElementById('teacherNameInput');
-      if(document.activeElement !== input) input.value = val;
-    }
-  }, err=>{
-    console.error('Teacher name failed to load from Firebase (check that "settings" is allowed in your database rules):', err);
-  });
-}
-
-function saveTeacherName(){
-  const val = document.getElementById('teacherNameInput').value.trim();
-  teacherName = val;
-  try{ localStorage.setItem('scm_teacherName', val); }catch(e){}
-  db.ref(`${ROOT}/settings/teacherName`).set(val).catch(err=>{
-    console.error('Teacher name failed to save to Firebase (check that "settings" is allowed in your database rules):', err);
-  });
-}
-
-function saveTeacherNameWithStatus(){
-  saveTeacherName();
-  setStatus('Teacher name saved');
-}
-
-function setStatus(msg){
-  document.getElementById('saveStatus').textContent = msg;
-  setTimeout(()=>{ document.getElementById('saveStatus').textContent = "Ready"; }, 1500);
-}
-function slugId(prefix){
-  return prefix + "_" + Math.random().toString(36).slice(2,9);
-}
-
-/* ====== CLASS LIST ====== */
-function loadClassList(){
-  db.ref(`${ROOT}/classes`).on('value', snap => {
-    const classes = snap.val() || {};
-    const sel = document.getElementById('classSelect');
-    const prev = currentClassId;
-    sel.innerHTML = '<option value="">-- select class --</option>';
-    Object.entries(classes)
-      .sort((a,b) => a[1].name.localeCompare(b[1].name, undefined, {numeric:true, sensitivity:'base'}))
-      .forEach(([id,c])=>{
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = c.name;
-        sel.appendChild(opt);
-      });
-    if(prev && classes[prev]) sel.value = prev;
-  });
-}
-
-document.getElementById('classSelect').addEventListener('change', (e)=>{
-  selectClass(e.target.value);
-});
-
-function selectClass(id){
-  currentClassId = id || null;
-  if(!currentClassId){
-    document.getElementById('roomTitle').textContent = "No class selected";
-    document.getElementById('room').innerHTML = "";
-    document.getElementById('unassignedList').innerHTML = "";
-    return;
-  }
-  db.ref(`${ROOT}/classes/${currentClassId}/name`).once('value').then(s=>{
-    document.getElementById('roomTitle').textContent = s.val() || "Class";
-  });
-  attachClassListeners();
-}
-
-function attachClassListeners(){
-  db.ref(`${ROOT}/rosters/${currentClassId}`).on('value', snap=>{
-    roster = snap.val() || {};
-    render();
-  });
-  db.ref(`${ROOT}/layouts/${currentClassId}`).on('value', snap=>{
-    layout = snap.val() || {};
-    render();
-  });
-  db.ref(`${ROOT}/seating/${currentClassId}`).on('value', snap=>{
-    seating = snap.val() || {};
-    render();
-  });
-  db.ref(`${ROOT}/locks/${currentClassId}`).on('value', snap=>{
-    locks = snap.val() || {};
-    render();
-  });
-}
-
-/* ====== NEW CLASS MODAL ====== */
-function openNewClassModal(){ document.getElementById('newClassModal').classList.add('show'); }
-function closeNewClassModal(){ document.getElementById('newClassModal').classList.remove('show'); }
-
-/* ====== HELP MODAL ====== */
-function openHelpModal(){ document.getElementById('helpModal').classList.add('show'); }
-function closeHelpModal(){ document.getElementById('helpModal').classList.remove('show'); }
-
-function createNewClass(){
-  const name = document.getElementById('newClassName').value.trim();
-  if(!name) return;
-  const id = slugId('class');
-  db.ref(`${ROOT}/classes/${id}`).set({name, createdAt: Date.now()});
-  document.getElementById('newClassName').value = '';
-  closeNewClassModal();
-  document.getElementById('classSelect').value = id;
-  selectClass(id);
-}
-
-function renameClass(){
-  if(!currentClassId){ alert('Select a class first.'); return; }
-  const sel = document.getElementById('classSelect');
-  const currentName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
-  const newName = prompt('New name for this class:', currentName);
-  if(!newName || !newName.trim() || newName.trim() === currentName) return;
-  db.ref(`${ROOT}/classes/${currentClassId}/name`).set(newName.trim());
-  document.getElementById('roomTitle').textContent = newName.trim();
-  setStatus('Class renamed');
-}
-
-function deleteClass(){
-  if(!currentClassId){ alert('Select a class first.'); return; }
-  const sel = document.getElementById('classSelect');
-  const className = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : 'this class';
-  if(!confirm(`Delete "${className}" entirely? This removes its roster, desks, seating, and locks. This can't be undone.`)) return;
-  const idToDelete = currentClassId;
-  db.ref(`${ROOT}/classes/${idToDelete}`).remove();
-  db.ref(`${ROOT}/rosters/${idToDelete}`).remove();
-  db.ref(`${ROOT}/layouts/${idToDelete}`).remove();
-  db.ref(`${ROOT}/seating/${idToDelete}`).remove();
-  db.ref(`${ROOT}/locks/${idToDelete}`).remove();
-  currentClassId = null;
-  document.getElementById('roomTitle').textContent = "No class selected";
-  document.getElementById('room').innerHTML = "";
-  document.getElementById('unassignedList').innerHTML = "";
-  setStatus('Class deleted');
-}
-
-/* ====== ROSTER ====== */
-function addStudentManually(){
-  if(!currentClassId){ alert('Select or create a class first.'); return; }
-  const input = document.getElementById('newStudentName');
-  const genderSelect = document.getElementById('newStudentGender');
-  const name = input.value.trim();
-  if(!name) return;
-  const id = slugId('stu');
-  db.ref(`${ROOT}/rosters/${currentClassId}/${id}`).set({name, gender: genderSelect.value || ""});
-  input.value = '';
-  genderSelect.value = '';
-}
-
-function removeStudent(id){
-  if(!confirm('Remove this student from the roster?')) return;
-  db.ref(`${ROOT}/rosters/${currentClassId}/${id}`).remove();
-  Object.entries(seating).forEach(([deskId, seats])=>{
-    Object.entries(seats||{}).forEach(([slot, stuId])=>{
-      if(stuId === id){
-        db.ref(`${ROOT}/seating/${currentClassId}/${deskId}/${slot}`).remove();
-        db.ref(`${ROOT}/locks/${currentClassId}/${deskId}/${slot}`).remove();
-      }
-    });
-  });
-}
-
-function clearRoster(){
-  if(!currentClassId){ alert('Select or create a class first.'); return; }
-  const count = Object.keys(roster).length;
-  if(count === 0){ alert('This class has no students yet.'); return; }
-  if(!confirm(`Remove all ${count} students from this class's roster? This also clears seating for this class. This can't be undone.`)) return;
-  db.ref(`${ROOT}/rosters/${currentClassId}`).remove();
-  db.ref(`${ROOT}/seating/${currentClassId}`).remove();
-  setStatus('Roster cleared');
-}
-
-function handleCSV(event){
-  if(!currentClassId){ alert('Select or create a class first.'); event.target.value=''; return; }
-  const file = event.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    const lines = e.target.result.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
-    const updates = {};
-    lines.forEach((line, idx)=>{
-      let clean = line.replace(/["']/g,'');
-      const lower = clean.toLowerCase();
-      if(idx === 0 && (lower.includes('last') || lower.includes('first') || lower.includes('name') || lower.includes('gender') || lower.includes('student'))){
-        return;
-      }
-      let name, gender = "";
-      const parts = clean.split(',').map(s=>s.trim());
-      if(parts.length >= 3){
-        name = `${parts[1]} ${parts[0]}`;
-        const g = parts[2].toUpperCase();
-        gender = g.startsWith('M') ? 'M' : g.startsWith('F') ? 'F' : '';
-      } else if(parts.length === 2){
-        name = `${parts[1]} ${parts[0]}`;
-      } else {
-        name = parts[0];
-      }
-      if(name){
-        const id = slugId('stu');
-        updates[id] = {name, gender};
-      }
-    });
-    db.ref(`${ROOT}/rosters/${currentClassId}`).update(updates);
-    setStatus('Roster imported');
-  };
-  reader.readAsText(file);
-  event.target.value = '';
-}
-
-/* ====== LAYOUT TEMPLATES ====== */
-function loadTemplateList(){
-  db.ref(`${ROOT}/layoutTemplates`).on('value', snap=>{
-    templates = snap.val() || {};
-    const sel = document.getElementById('templateSelect');
-    const prev = sel.value;
-    sel.innerHTML = '<option value="">-- choose template --</option>';
-    Object.entries(templates).forEach(([id,t])=>{
-      const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = t.name;
-      sel.appendChild(opt);
-    });
-    if(templates[prev]) sel.value = prev;
-  });
-}
-
-function applyTemplate(){
-  if(!currentClassId){ alert('Select or create a class first.'); return; }
-  const id = document.getElementById('templateSelect').value;
-  if(!id){ alert('Choose a saved layout first.'); return; }
-  const tmpl = templates[id];
-  if(!tmpl) return;
-  if(!confirm(`Apply "${tmpl.name}" to this class? Current desks and seating for this class will be replaced.`)) return;
-  db.ref(`${ROOT}/layouts/${currentClassId}`).set(tmpl.desks || {});
-  db.ref(`${ROOT}/seating/${currentClassId}`).remove();
-  setStatus('Layout applied');
-}
-
-function saveAsTemplate(){
-  if(!currentClassId){ alert('Select or create a class first.'); return; }
-  if(Object.keys(layout).length === 0){ alert('No desks to save yet.'); return; }
-  const name = prompt('Name this layout (e.g. "Rows" or "Groups"):');
-  if(!name) return;
-  const id = slugId('tmpl');
-  db.ref(`${ROOT}/layoutTemplates/${id}`).set({name, desks: layout});
-  setStatus('Layout saved');
-}
-
-function deleteTemplate(){
-  const id = document.getElementById('templateSelect').value;
-  if(!id){ alert('Choose a saved layout to delete first.'); return; }
-  const tmpl = templates[id];
-  if(!tmpl) return;
-  if(!confirm(`Delete the saved layout "${tmpl.name}"? This can't be undone. (It won't affect any class currently using it.)`)) return;
-  db.ref(`${ROOT}/layoutTemplates/${id}`).remove();
-  setStatus('Layout deleted');
-}
-
-/* ====== GRID GENERATION ====== */
-function generateGrid(){
-  if(!currentClassId){ alert('Select or create a class first.'); return; }
-  const rows = parseInt(document.getElementById('rowsInput').value) || 4;
-  const cols = parseInt(document.getElementById('colsInput').value) || 5;
-  const capacity = parseInt(document.getElementById('capacitySelect').value) || 1;
-  if(!confirm(`This replaces the current desk layout with a ${rows}x${cols} grid (${capacity} seat${capacity>1?'s':''}/desk). Continue?`)) return;
-
-  const deskWidth = capacity * 84 + (capacity-1)*4 + 8;
-  const deskHeight = 62;
-  const gapX = deskWidth + 40, gapY = 100;
-  const totalWidth = cols * deskWidth + (cols - 1) * 40;
-  const totalHeight = rows * deskHeight + (rows - 1) * (gapY - deskHeight);
-
-  const roomEl = document.getElementById('room');
-  const roomW = roomEl.clientWidth || 900;
-  const startX = Math.max(15, Math.round((roomW - totalWidth) / 2));
-  const startY = 15;
-
-  const newLayout = {};
-  for(let r=0;r<rows;r++){
-    for(let c=0;c<cols;c++){
-      const id = `d_${r}_${c}_${Math.random().toString(36).slice(2,5)}`;
-      newLayout[id] = { x: startX + c*gapX, y: startY + r*gapY, capacity };
-    }
-  }
-  db.ref(`${ROOT}/layouts/${currentClassId}`).set(newLayout);
-  db.ref(`${ROOT}/seating/${currentClassId}`).remove();
-}
-
-function addDesk(){
-  if(!currentClassId){ alert('Select or create a class first.'); return; }
-  const id = slugId('desk');
-  db.ref(`${ROOT}/layouts/${currentClassId}/${id}`).set({x: 20, y: 20, capacity: 1});
-}
-
-function removeDesk(deskId){
-  db.ref(`${ROOT}/layouts/${currentClassId}/${deskId}`).remove();
-  db.ref(`${ROOT}/seating/${currentClassId}/${deskId}`).remove();
-}
-
-function clearLayout(){
-  if(!currentClassId){ alert('Select or create a class first.'); return; }
-  const count = Object.keys(layout).length;
-  if(count === 0){ alert('This class has no tables yet.'); return; }
-  if(!confirm(`Remove all ${count} tables from this class? Students stay in the roster and simply return to Unassigned. This can't be undone.`)) return;
-  db.ref(`${ROOT}/layouts/${currentClassId}`).remove();
-  db.ref(`${ROOT}/seating/${currentClassId}`).remove();
-  db.ref(`${ROOT}/locks/${currentClassId}`).remove();
-  setStatus('Layout cleared');
-}
-
-function rotateDesk(deskId){
-  const current = (layout[deskId] && layout[deskId].rotation) || 0;
-  const next = (current + 90) % 360;
-  db.ref(`${ROOT}/layouts/${currentClassId}/${deskId}/rotation`).set(next);
-}
-
-function editCapacity(deskId){
-  const current = (layout[deskId] && layout[deskId].capacity) || 1;
-  const val = prompt('How many seats at this desk/table?', current);
-  const n = parseInt(val);
-  if(!n || n < 1 || n > 6) return;
-  db.ref(`${ROOT}/layouts/${currentClassId}/${deskId}/capacity`).set(n);
-  const seatsHere = seating[deskId] || {};
-  Object.keys(seatsHere).forEach(slot=>{
-    if(parseInt(slot) >= n){
-      db.ref(`${ROOT}/seating/${currentClassId}/${deskId}/${slot}`).remove();
-    }
-  });
-}
-
-function setViewMode(mode){
-  viewMode = mode;
-  if(mode !== 'editLayout'){
-    selectMode = false;
-    selectedDeskIds.clear();
-  }
-
-  document.getElementById('modeCleanBtn').classList.toggle('active', mode === 'clean');
-  document.getElementById('modeLayoutBtn').classList.toggle('active', mode === 'editLayout');
-  document.getElementById('modeStudentsBtn').classList.toggle('active', mode === 'editStudents');
-
-  document.querySelectorAll('.toolbar .group[data-mode]').forEach(group=>{
-    const groupMode = group.dataset.mode;
-    const visible = groupMode === 'always' ||
-      (groupMode === 'layout' && mode === 'editLayout') ||
-      (groupMode === 'students' && mode === 'editStudents');
-    group.style.display = visible ? 'flex' : 'none';
-  });
-
-  render();
-}
-
-function toggleSelectMode(){
-  selectMode = !selectMode;
-  const btn = document.getElementById('selectModeBtn');
-  btn.textContent = `Select Tables: ${selectMode ? 'On' : 'Off'}`;
-  btn.classList.toggle('active', selectMode);
-  if(!selectMode) selectedDeskIds.clear();
-  render();
-}
-
-function toggleDeskSelection(deskId){
-  if(selectedDeskIds.has(deskId)) selectedDeskIds.delete(deskId);
-  else selectedDeskIds.add(deskId);
-  render();
-}
-
-function clearSelection(){
-  selectedDeskIds.clear();
-  render();
-}
-
-function duplicateSelected(){
-  if(!currentClassId){ alert('Select or create a class first.'); return; }
-  if(selectedDeskIds.size === 0){ alert('Turn on "Select Tables", then click one or more tables to select them first.'); return; }
-  const ids = Array.from(selectedDeskIds).filter(id => layout[id]);
-  if(ids.length === 0) return;
-
-  const xs = ids.map(id => layout[id].x);
-  const maxX = Math.max(...xs);
-  const minX = Math.min(...xs);
-  const offsetX = (maxX - minX) + 170;
-
-  const updates = {};
-  const newIds = [];
-  ids.forEach(id=>{
-    const d = layout[id];
-    const newId = slugId('desk');
-    updates[`${ROOT}/layouts/${currentClassId}/${newId}`] = {
-      x: d.x + offsetX,
-      y: d.y,
-      capacity: d.capacity || 1,
-      rotation: d.rotation || 0
-    };
-    newIds.push(newId);
-  });
-  db.ref().update(updates);
-  selectedDeskIds = new Set(newIds);
-  setStatus('Tables duplicated');
-}
-
-/* ====== SEATING ACTIONS ====== */
-function randomizeAll(){
-  if(!currentClassId) return;
-  if(Object.keys(layout).length === 0){ alert('Generate or add desks first.'); return; }
-
-  const placementOrder = document.getElementById('placementOrderSelect') ? document.getElementById('placementOrderSelect').value : 'random';
-  const alternate = placementOrder === 'random' && document.getElementById('alternateGenderToggle').checked;
-
-  const lastNameOf = (name)=>{
-    const parts = (name || '').trim().split(/\s+/);
-    return parts[parts.length - 1] || '';
-  };
-
-  const deskEntries = Object.entries(layout).sort((a,b)=>{
-    if(Math.abs(a[1].y - b[1].y) > 20) return b[1].y - a[1].y;
-    return a[1].x - b[1].x;
-  });
-
-  const openSlots = [];
-  deskEntries.forEach(([deskId, d])=>{
-    const cap = d.capacity || 1;
-    for(let i=0;i<cap;i++){
-      const isLocked = locks[deskId] && locks[deskId][i];
-      if(!isLocked) openSlots.push({deskId, slot:i});
-    }
-  });
-  if(openSlots.length === 0){ alert('Every seat is locked — unlock at least one to reshuffle.'); return; }
-
-  const lockedStudentIds = new Set();
-  Object.entries(seating).forEach(([deskId, seats])=>{
-    Object.entries(seats||{}).forEach(([slot, sid])=>{
-      if(sid && locks[deskId] && locks[deskId][slot]) lockedStudentIds.add(sid);
-    });
-  });
-  const pool = Object.keys(roster).filter(id => !lockedStudentIds.has(id));
-
-  let ordered;
-  if(placementOrder === 'alphaFirst'){
-    ordered = [...pool].sort((a,b)=> roster[a].name.localeCompare(roster[b].name, undefined, {sensitivity:'base'}));
-  } else if(placementOrder === 'alphaLast'){
-    ordered = [...pool].sort((a,b)=> lastNameOf(roster[a].name).localeCompare(lastNameOf(roster[b].name), undefined, {sensitivity:'base'}));
-  } else if(alternate){
-    const groups = {};
-    pool.forEach(id=>{
-      const g = roster[id].gender || 'unspecified';
-      groups[g] = groups[g] || [];
-      groups[g].push(id);
-    });
-    Object.values(groups).forEach(arr => arr.sort(()=>Math.random()-0.5));
-    ordered = [];
-    const keys = Object.keys(groups);
-    let added = true;
-    while(added){
-      added = false;
-      for(const k of keys){
-        if(groups[k].length){
-          ordered.push(groups[k].shift());
-          added = true;
-        }
-      }
-    }
-  } else {
-    ordered = [...pool].sort(()=>Math.random()-0.5);
-  }
-
-  const newSeating = {};
-  Object.entries(seating).forEach(([deskId, seats])=>{
-    Object.entries(seats||{}).forEach(([slot, sid])=>{
-      if(sid && locks[deskId] && locks[deskId][slot]){
-        newSeating[deskId] = newSeating[deskId] || {};
-        newSeating[deskId][slot] = sid;
-      }
-    });
-  });
-  openSlots.forEach((s, i)=>{
-    if(ordered[i]){
-      newSeating[s.deskId] = newSeating[s.deskId] || {};
-      newSeating[s.deskId][s.slot] = ordered[i];
-    }
-  });
-
-  db.ref(`${ROOT}/seating/${currentClassId}`).set(newSeating);
-  setStatus('Reshuffled');
-}
-
-function toggleLock(deskId, slot){
-  const isLocked = locks[deskId] && locks[deskId][slot];
-  if(isLocked){
-    db.ref(`${ROOT}/locks/${currentClassId}/${deskId}/${slot}`).remove();
-  } else {
-    db.ref(`${ROOT}/locks/${currentClassId}/${deskId}/${slot}`).set(true);
-  }
-}
-
-function cycleGender(id){
-  const order = ['', 'M', 'F'];
-  const current = (roster[id] && roster[id].gender) || '';
-  const next = order[(order.indexOf(current) + 1) % order.length];
-  db.ref(`${ROOT}/rosters/${currentClassId}/${id}/gender`).set(next);
-}
-
-function renameStudent(id){
-  const current = (roster[id] && roster[id].name) || '';
-  const newName = prompt('New name for this student:', current);
-  if(!newName || !newName.trim() || newName.trim() === current) return;
-  db.ref(`${ROOT}/rosters/${currentClassId}/${id}/name`).set(newName.trim());
-  setStatus('Name updated');
-}
-
-function clearSeats(){
-  if(!currentClassId) return;
-  if(!confirm('Send all students back to Unassigned?')) return;
-  db.ref(`${ROOT}/seating/${currentClassId}`).remove();
-  db.ref(`${ROOT}/locks/${currentClassId}`).remove();
-}
-
-function seatStudent(deskId, slot, studentId){
-  const updates = {};
-  Object.entries(seating).forEach(([dId, seats])=>{
-    Object.entries(seats||{}).forEach(([idx, sId])=>{
-      if(sId === studentId) updates[`${dId}/${idx}`] = null;
-    });
-  });
-  updates[`${deskId}/${slot}`] = studentId;
-  db.ref(`${ROOT}/seating/${currentClassId}`).update(updates);
-}
-
-function unseatSlot(deskId, slot){
-  db.ref(`${ROOT}/seating/${currentClassId}/${deskId}/${slot}`).remove();
-  db.ref(`${ROOT}/locks/${currentClassId}/${deskId}/${slot}`).remove();
-}
-
-/* ====== DRAG & DROP ====== */
-function dropOnSeat(event, deskId, slot){
-  event.preventDefault();
-  event.currentTarget.classList.remove('dropTarget');
-  const studentId = event.dataTransfer.getData('text/student');
-  if(studentId) seatStudent(deskId, slot, studentId);
-}
-
-function dropOnUnassigned(event){
-  event.preventDefault();
-  document.getElementById('unassignedList').classList.remove('dropTarget');
-  const deskId = event.dataTransfer.getData('text/seat-desk');
-  const slot = event.dataTransfer.getData('text/seat-slot');
-  if(deskId !== '' && slot !== '') unseatSlot(deskId, slot);
-}
-
-/* ====== RENDER ====== */
-function render(){
-  const room = document.getElementById('room');
-  room.innerHTML = '';
-  const seatedIds = new Set();
-  Object.values(seating).forEach(seats=>{
-    Object.values(seats||{}).forEach(sid=>{ if(sid) seatedIds.add(sid); });
-  });
-
-  Object.entries(layout).forEach(([deskId, pos])=>{
-    const capacity = pos.capacity || 1;
-    const deskHasStudent = Object.values(seating[deskId] || {}).some(sid => !!sid);
-    const desk = document.createElement('div');
-    const isSelected = selectedDeskIds.has(deskId);
-    const editingLayout = viewMode === 'editLayout';
-    const editingStudents = viewMode === 'editStudents';
-    desk.className = 'desk' + (editingLayout ? ' arrangeMode' : '') + (capacity === 1 ? ' single' : '') + (editingLayout ? ' movable' : '') + (selectMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
-    desk.dataset.deskId = deskId;
-    desk.style.left = pos.x + 'px';
-    desk.style.top = pos.y + 'px';
-
-    if(editingLayout){
-      const icons = document.createElement('div');
-      icons.className = 'deskIcons';
-      const rotateBtn = document.createElement('span');
-      rotateBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08a6.003 6.003 0 01-5.65 4c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L14 11h7V4l-3.35 2.35z"/></svg>';
-      rotateBtn.title = 'Rotate this table 90°';
-      rotateBtn.onclick = (e)=>{ e.stopPropagation(); rotateDesk(deskId); };
-      const remove = document.createElement('span');
-      remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
-      remove.title = 'Remove this table';
-      remove.onclick = (e)=>{
-        e.stopPropagation();
-        if(!confirm('Remove this table? Any student seated there will move back to Unassigned.')) return;
-        removeDesk(deskId);
-      };
-      icons.appendChild(rotateBtn);
-      icons.appendChild(remove);
-      desk.appendChild(icons);
-    }
-
-    const rotation = pos.rotation || 0;
-    desk.style.transform = `rotate(${rotation}deg)`;
-
-    for(let i=0;i<capacity;i++){
-      const studentId = seating[deskId] ? seating[deskId][i] : null;
-      const isLocked = !!(locks[deskId] && locks[deskId][i]);
-      const gender = studentId && roster[studentId] ? roster[studentId].gender : '';
-      const genderClass = gender === 'M' ? ' male' : (gender === 'F' ? ' female' : '');
+  <!-- Cheat Sheet Modal -->
+  <div id="cheatSheetModal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Seating Chart Cheat Sheet</h2>
       
-      const seat = document.createElement('div');
-      seat.className = 'seat' + (studentId ? ' filled' : ' empty') + genderClass + (isLocked ? ' locked' : '');
-      seat.style.position = 'relative';
+      <h3>Navigation & Modes</h3>
+      <ul>
+        <li><strong>Standard View:</strong> Tidy, view-only mode for daily presentation and taking attendance. Prevents accidental edits.</li>
+        <li><strong>✏️ Edit Students:</strong> Drag and drop students into seats, add/remove students, or lock specific seat assignments. Click <em>Done Editing</em> when finished.</li>
+        <li><strong>📐 Edit Layout:</strong> Add, move, rotate, or delete desks and tables to match your classroom configuration. Click <em>Done Editing</em> when finished.</li>
+      </ul>
 
-      const label = document.createElement('span');
-      label.textContent = studentId && roster[studentId] ? roster[studentId].name : 'Empty';
-      if(studentId && editingStudents){
-        label.style.cursor = 'pointer';
-        label.title = 'Click to rename this student';
-        label.onclick = (e)=>{ e.stopPropagation(); renameStudent(studentId); };
+      <h3>Quick Tips</h3>
+      <ul>
+        <li>Click <strong>Done Editing</strong> anytime to secure your chart and lock in your updates.</li>
+        <li>Use <strong>Export PDF</strong> to download a clean, high-resolution copy for print.</li>
+      </ul>
+      <br />
+      <button id="closeCheatSheetBtn" class="btn-primary">Close</button>
+    </div>
+  </div>
+
+  <script>
+    const editStudentsBtn = document.getElementById('editStudentsBtn');
+    const editLayoutBtn = document.getElementById('editLayoutBtn');
+    const doneEditingBtn = document.getElementById('doneEditingBtn');
+    const cheatSheetBtn = document.getElementById('cheatSheetBtn');
+    const cheatSheetModal = document.getElementById('cheatSheetModal');
+    const closeCheatSheetBtn = document.getElementById('closeCheatSheetBtn');
+
+    function setMode(mode) {
+      editStudentsBtn.classList.remove('active');
+      editLayoutBtn.classList.remove('active');
+
+      if (mode === 'students') {
+        editStudentsBtn.classList.add('active');
+        doneEditingBtn.classList.remove('hidden');
+      } else if (mode === 'layout') {
+        editLayoutBtn.classList.add('active');
+        doneEditingBtn.classList.remove('hidden');
+      } else {
+        // Standard view mode
+        doneEditingBtn.classList.add('hidden');
       }
-      seat.appendChild(label);
-
-      if(studentId && editingStudents){
-        const lockIcon = document.createElement('span');
-        lockIcon.className = 'lockIcon';
-        lockIcon.textContent = isLocked ? '🔒' : '🔓';
-        lockIcon.title = isLocked ? 'Unlock this seat' : 'Lock this student in place';
-        lockIcon.onclick = (e)=>{ e.stopPropagation(); toggleLock(deskId, i); };
-        seat.appendChild(lockIcon);
-
-        if(!isLocked){
-          const removeIcon = document.createElement('span');
-          removeIcon.className = 'removeSeatIcon';
-          removeIcon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>';
-          removeIcon.title = 'Send this student back to Unassigned';
-          removeIcon.onclick = (e)=>{ e.stopPropagation(); unseatSlot(deskId, i); };
-          seat.appendChild(removeIcon);
-        }
-      }
-
-      if(editingStudents && !isLocked){
-        seat.ondragover = (e)=>{ e.preventDefault(); seat.classList.add('dropTarget'); };
-        seat.ondragleave = ()=> seat.classList.remove('dropTarget');
-        seat.ondrop = (e)=> dropOnSeat(e, deskId, i);
-        if(studentId){
-          seat.draggable = true;
-          seat.ondragstart = (e)=>{
-            e.dataTransfer.setData('text/student', studentId);
-            e.dataTransfer.setData('text/seat-desk', deskId);
-            e.dataTransfer.setData('text/seat-slot', String(i));
-          };
-        }
-      }
-      desk.appendChild(seat);
     }
 
-    if(editingLayout){
-      desk.onmousedown = (e)=> startDeskDrag(e, deskId, desk);
-    }
+    editStudentsBtn.addEventListener('click', () => setMode('students'));
+    editLayoutBtn.addEventListener('click', () => setMode('layout'));
+    doneEditingBtn.addEventListener('click', () => setMode('view'));
 
-    room.appendChild(desk);
-  });
-
-  const list = document.getElementById('unassignedList');
-  list.innerHTML = '';
-  const unassigned = Object.entries(roster)
-    .filter(([id])=>!seatedIds.has(id))
-    .sort((a,b)=> a[1].name.localeCompare(b[1].name, undefined, {sensitivity:'base'}));
-  if(unassigned.length === 0){
-    list.innerHTML = '<div id="emptyMsg">Everyone is seated 🎉</div>';
-  }
-  unassigned.forEach(([id, stu])=>{
-    const chip = document.createElement('div');
-    chip.className = 'chip';
-    chip.draggable = true;
-    chip.ondragstart = (e)=>{
-      e.dataTransfer.setData('text/student', id);
-      e.dataTransfer.setData('text/seat-desk', '');
-      e.dataTransfer.setData('text/seat-slot', '');
-    };
-    const nameSpan = document.createElement('span');
-    nameSpan.textContent = stu.name;
-    nameSpan.style.cursor = 'pointer';
-    nameSpan.title = 'Click to rename this student';
-    nameSpan.onclick = (e)=>{ e.stopPropagation(); renameStudent(id); };
-    const genderBadge = document.createElement('span');
-    genderBadge.textContent = stu.gender ? `(${stu.gender})` : '(-)';
-    genderBadge.title = 'Click to set gender (used for alternating shuffle)';
-    genderBadge.style.cursor = 'pointer';
-    genderBadge.style.color = 'var(--muted)';
-    genderBadge.style.fontSize = '11px';
-    genderBadge.onclick = ()=> cycleGender(id);
-    const del = document.createElement('span');
-    del.className = 'del';
-    del.textContent = '×';
-    del.onclick = ()=> removeStudent(id);
-    chip.appendChild(nameSpan);
-    chip.appendChild(genderBadge);
-    chip.appendChild(del);
-    list.appendChild(chip);
-  });
-}
-
-/* ====== DESK DRAGGING / SELECTION ====== */
-function getLocalRect(el, roomRect, roomEl){
-  const r = el.getBoundingClientRect();
-  return {
-    left: r.left - roomRect.left + roomEl.scrollLeft,
-    right: r.right - roomRect.left + roomEl.scrollLeft,
-    top: r.top - roomRect.top + roomEl.scrollTop,
-    bottom: r.bottom - roomRect.top + roomEl.scrollTop,
-    centerX: (r.left + r.right) / 2 - roomRect.left + roomEl.scrollLeft,
-    centerY: (r.top + r.bottom) / 2 - roomRect.top + roomEl.scrollTop
-  };
-}
-
-function startDeskDrag(e, deskId, deskEl){
-  if(e.target.tagName === 'SPAN') return;
-
-  const startClientX = e.clientX;
-  const startClientY = e.clientY;
-
-  const groupIds = (selectMode && selectedDeskIds.has(deskId) && selectedDeskIds.size > 0)
-    ? Array.from(selectedDeskIds).filter(id => layout[id])
-    : [deskId];
-
-  const startPositions = {};
-  groupIds.forEach(id=>{
-    startPositions[id] = { x: layout[id].x, y: layout[id].y };
-  });
-
-  const roomEl = document.getElementById('room');
-  const roomRectStart = roomEl.getBoundingClientRect();
-  const SNAP_THRESHOLD = 6;
-
-  const otherRects = [];
-  document.querySelectorAll('.desk[data-desk-id]').forEach(el=>{
-    if(groupIds.includes(el.dataset.deskId)) return;
-    otherRects.push(getLocalRect(el, roomRectStart, roomEl));
-  });
-
-  let groupBox = null;
-  groupIds.forEach(id=>{
-    const el = document.querySelector(`.desk[data-desk-id="${id}"]`);
-    if(!el) return;
-    const r = getLocalRect(el, roomRectStart, roomEl);
-    if(!groupBox){
-      groupBox = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
-    } else {
-      groupBox.left = Math.min(groupBox.left, r.left);
-      groupBox.right = Math.max(groupBox.right, r.right);
-      groupBox.top = Math.min(groupBox.top, r.top);
-      groupBox.bottom = Math.max(groupBox.bottom, r.bottom);
-    }
-  });
-
-  const guideContainer = document.createElement('div');
-  guideContainer.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:40;';
-  roomEl.appendChild(guideContainer);
-
-  function drawGuides(xTarget, yTarget){
-    guideContainer.innerHTML = '';
-    const w = roomEl.scrollWidth, h = roomEl.scrollHeight;
-    if(xTarget !== null){
-      const line = document.createElement('div');
-      line.style.cssText = `position:absolute;left:${xTarget}px;top:0;width:1px;height:${h}px;background:#2563eb;`;
-      guideContainer.appendChild(line);
-    }
-    if(yTarget !== null){
-      const line = document.createElement('div');
-      line.style.cssText = `position:absolute;top:${yTarget}px;left:0;height:1px;width:${w}px;background:#2563eb;`;
-      guideContainer.appendChild(line);
-    }
-  }
-
-  let moved = false;
-  let lastDx = 0, lastDy = 0;
-  deskEl.classList.add('dragging');
-
-  function onMove(ev){
-    let dx = ev.clientX - startClientX;
-    let dy = ev.clientY - startClientY;
-    if(Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
-    if(!moved) return;
-
-    let xTarget = null, yTarget = null;
-
-    if(groupBox){
-      const curLeft = groupBox.left + dx, curRight = groupBox.right + dx, curCenterX = (curLeft + curRight) / 2;
-      const curTop = groupBox.top + dy, curBottom = groupBox.bottom + dy, curCenterY = (curTop + curBottom) / 2;
-
-      let bestXDelta = null, bestYDelta = null;
-
-      otherRects.forEach(r=>{
-        [[curLeft, r.left], [curLeft, r.right], [curLeft, r.centerX],
-         [curRight, r.left], [curRight, r.right], [curRight, r.centerX],
-         [curCenterX, r.centerX]].forEach(([cur, target])=>{
-          const d = target - cur;
-          if(Math.abs(d) <= SNAP_THRESHOLD && (bestXDelta === null || Math.abs(d) < Math.abs(bestXDelta))){
-            bestXDelta = d; xTarget = target;
-          }
-        });
-        [[curTop, r.top], [curTop, r.bottom], [curTop, r.centerY],
-         [curBottom, r.top], [curBottom, r.bottom], [curBottom, r.centerY],
-         [curCenterY, r.centerY]].forEach(([cur, target])=>{
-          const d = target - cur;
-          if(Math.abs(d) <= SNAP_THRESHOLD && (bestYDelta === null || Math.abs(d) < Math.abs(bestYDelta))){
-            bestYDelta = d; yTarget = target;
-          }
-        });
-      });
-
-      if(bestXDelta !== null) dx += bestXDelta;
-      if(bestYDelta !== null) dy += bestYDelta;
-    }
-
-    drawGuides(xTarget, yTarget);
-    lastDx = dx; lastDy = dy;
-
-    groupIds.forEach(id=>{
-      const el = document.querySelector(`.desk[data-desk-id="${id}"]`);
-      if(el){
-        el.style.left = Math.max(0, startPositions[id].x + dx) + 'px';
-        el.style.top = Math.max(0, startPositions[id].y + dy) + 'px';
-      }
-    });
-  }
-
-  function onUp(){
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-    deskEl.classList.remove('dragging');
-    guideContainer.remove();
-
-    if(!moved){
-      if(selectMode) toggleDeskSelection(deskId);
-      return;
-    }
-
-    const updates = {};
-    groupIds.forEach(id=>{
-      updates[`${ROOT}/layouts/${currentClassId}/${id}/x`] = Math.max(0, startPositions[id].x + lastDx);
-      updates[`${ROOT}/layouts/${currentClassId}/${id}/y`] = Math.max(0, startPositions[id].y + lastDy);
-    });
-    db.ref().update(updates);
-  }
-
-  document.addEventListener('mousemove', onMove);
-  document.addEventListener('mouseup', onUp);
-}
-
-/* ====== EXPORT PDF ====== */
-function exportPDF(){
-  if(!currentClassId){ alert('Select a class first.'); return; }
-  const room = document.getElementById('room');
-  if(Object.keys(layout).length === 0){ alert('No desks to export yet.'); return; }
-
-  const title = document.getElementById('roomTitle').textContent;
-  const originalOverflow = room.style.overflow;
-  const originalHeight = room.style.height;
-
-  room.classList.add('printing');
-  room.style.overflow = 'visible';
-  room.style.height = room.scrollHeight + 'px';
-
-  setStatus('Building PDF...');
-
-  html2canvas(room, { backgroundColor: '#ffffff', scale: 2 }).then(canvas => {
-    room.classList.remove('printing');
-    room.style.overflow = originalOverflow;
-    room.style.height = originalHeight;
-
-    const margin = 30;
-    const headerSpace = 52;
-    const origW = canvas.width / 2;
-    const origH = canvas.height / 2;
-
-    const landscapeW = 792, landscapeH = 612;
-    const portraitW = 612, portraitH = 792;
-
-    const scaleLandscape = Math.min(
-      (landscapeW - margin * 2) / origW,
-      (landscapeH - margin * 2 - headerSpace) / origH
-    );
-    const scalePortraitRotated = Math.min(
-      (portraitW - margin * 2) / origH,
-      (portraitH - margin * 2 - headerSpace) / origW
-    );
-
-    const useRotated = scalePortraitRotated > scaleLandscape;
-
-    let sourceCanvas = canvas;
-    let pageW = landscapeW, pageH = landscapeH, pdfOrientation = 'landscape';
-    let nativeImgW = origW, nativeImgH = origH;
-
-    if(useRotated){
-      const rotated = document.createElement('canvas');
-      rotated.width = canvas.height;
-      rotated.height = canvas.width;
-      const rctx = rotated.getContext('2d');
-      rctx.translate(rotated.width, 0);
-      rctx.rotate(Math.PI / 2);
-      rctx.drawImage(canvas, 0, 0);
-      sourceCanvas = rotated;
-      pageW = portraitW; pageH = portraitH; pdfOrientation = 'portrait';
-      nativeImgW = rotated.width / 2;
-      nativeImgH = rotated.height / 2;
-    }
-
-    const imgData = sourceCanvas.toDataURL('image/png');
-    const { jsPDF } = window.jspdf;
-
-    const availW = pageW - margin * 2;
-    const availH = pageH - margin * 2 - headerSpace;
-    const scale = Math.min(availW / nativeImgW, availH / nativeImgH);
-    const imgW = nativeImgW * scale;
-    const imgH = nativeImgH * scale;
-    const imgX = margin + (availW - imgW) / 2;
-
-    const now = new Date();
-    const dateStr = now.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
-    const timeStr = now.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
-
-    const pdf = new jsPDF({
-      orientation: pdfOrientation,
-      unit: 'pt',
-      format: 'letter'
-    });
-
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(20);
-    pdf.setTextColor(206, 31, 7);
-    const currentTeacherName = document.getElementById('teacherNameInput').value.trim();
-    const headerTitle = currentTeacherName ? `${currentTeacherName}: ${title}` : title;
-    pdf.text(headerTitle, pageW / 2, margin, { align: 'center' });
-
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(11);
-    pdf.setTextColor(100, 100, 100);
-    pdf.text(`${dateStr} ${timeStr}`, pageW / 2, margin + 16, { align: 'center' });
-
-    pdf.addImage(imgData, 'PNG', imgX, margin + 32, imgW, imgH);
-
-    const stamp = now.toISOString().slice(0,16).replace('T','_').replace(':','-');
-    const fileName = title.replace(/[^a-z0-9]+/gi, '_') + '_seating_chart_' + stamp + '.pdf';
-    pdf.save(fileName);
-    setStatus('PDF saved');
-  }).catch(err => {
-    room.classList.remove('printing');
-    room.style.overflow = originalOverflow;
-    room.style.height = originalHeight;
-    alert('Export failed: ' + err.message);
-  });
-}
-
-/* ====== INIT ====== */
-loadClassList();
-loadTemplateList();
-loadTeacherName();
-setViewMode('clean');
-</script>
+    cheatSheetBtn.addEventListener('click', () => cheatSheetModal.classList.remove('hidden'));
+    closeCheatSheetBtn.addEventListener('click', () => cheatSheetModal.classList.add('hidden'));
+  </script>
 </body>
 </html>
