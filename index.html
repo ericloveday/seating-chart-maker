@@ -14,6 +14,8 @@
   :root{
     --red:#ce1f07;
     --red-dark:#a31905;
+    --dark-gray:#4a4a4a;
+    --dark-gray-border:#333333;
     --bg:#f4f5f7;
     --card:#ffffff;
     --border:#dfe2e6;
@@ -147,8 +149,8 @@
     position:absolute;
     min-height:62px;
     background:#fff;
-    border:2px solid var(--red);
-    border-radius:8px;
+    border:2px solid var(--dark-gray-border);
+    border-radius:0px; /* Square corners for tables */
     display:flex;
     align-items:stretch;
     padding:4px;
@@ -177,8 +179,8 @@
     width:80px;
     min-height:50px;
     background:#fdfdfd;
-    border:1.5px dashed var(--border);
-    border-radius:6px;
+    border:1.5px dashed var(--dark-gray-border);
+    border-radius:6px; /* Kept rounded */
     display:flex;
     align-items:center;
     justify-content:center;
@@ -191,7 +193,7 @@
   }
   .seat.filled{
     border-style:solid;
-    border-color:var(--red);
+    border-color:var(--dark-gray-border);
     background:#fff;
   }
   .seat.empty{
@@ -199,11 +201,11 @@
     font-weight:600;
     font-style:italic;
     cursor:default;
-    border-color:rgba(206,31,7,0.4);
+    border-color:var(--dark-gray-border);
   }
   .seat.dropTarget{
-    background:#fdeceb;
-    box-shadow:0 0 0 3px var(--red);
+    background:#e5e7eb;
+    box-shadow:0 0 0 3px var(--dark-gray-border);
   }
   .seat.locked{
     border-color:#d4a017;
@@ -283,7 +285,7 @@
   }
   .deskIcons span.gear{background:#555;}
   #room.printing .seat.locked{
-    border-color:var(--red);
+    border-color:var(--dark-gray-border);
     background:#fff;
   }
   #room.printing .deskIcons{display:none;}
@@ -333,8 +335,8 @@
   }
   .chip{
     background:#fff;
-    border:1.5px solid var(--red);
-    color:var(--red-dark);
+    border:1.5px solid var(--dark-gray-border);
+    color:var(--text);
     border-radius:6px;
     padding:7px 10px;
     font-size:13px;
@@ -823,7 +825,6 @@ function handleCSV(event){
     lines.forEach((line, idx)=>{
       let clean = line.replace(/["']/g,'');
       const lower = clean.toLowerCase();
-      // Skip an obvious header row, e.g. "Last Name, First Name, Gender"
       if(idx === 0 && (lower.includes('last') || lower.includes('first') || lower.includes('name') || lower.includes('gender') || lower.includes('student'))){
         return;
       }
@@ -1055,7 +1056,6 @@ function randomizeAll(){
     return parts[parts.length - 1] || '';
   };
 
-  // Seats in "front of room first" order: bottom row (highest y) first, left-to-right within a row
   const deskEntries = Object.entries(layout).sort((a,b)=>{
     if(Math.abs(a[1].y - b[1].y) > 20) return b[1].y - a[1].y;
     return a[1].x - b[1].x;
@@ -1071,7 +1071,6 @@ function randomizeAll(){
   });
   if(openSlots.length === 0){ alert('Every seat is locked — unlock at least one to reshuffle.'); return; }
 
-  // Students already sitting in a locked seat stay put and are excluded from the shuffle pool
   const lockedStudentIds = new Set();
   Object.entries(seating).forEach(([deskId, seats])=>{
     Object.entries(seats||{}).forEach(([slot, sid])=>{
@@ -1109,7 +1108,6 @@ function randomizeAll(){
     ordered = [...pool].sort(()=>Math.random()-0.5);
   }
 
-  // Keep locked assignments, then fill open slots with the ordered pool
   const newSeating = {};
   Object.entries(seating).forEach(([deskId, seats])=>{
     Object.entries(seats||{}).forEach(([slot, sid])=>{
@@ -1348,13 +1346,11 @@ function getLocalRect(el, roomRect, roomEl){
 }
 
 function startDeskDrag(e, deskId, deskEl){
-  if(e.target.tagName === 'SPAN') return; // clicked an icon, not a drag/select
+  if(e.target.tagName === 'SPAN') return;
 
   const startClientX = e.clientX;
   const startClientY = e.clientY;
 
-  // Decide which desks move together: if this desk is part of the current
-  // selection, drag the whole selection; otherwise just this one desk.
   const groupIds = (selectMode && selectedDeskIds.has(deskId) && selectedDeskIds.size > 0)
     ? Array.from(selectedDeskIds).filter(id => layout[id])
     : [deskId];
@@ -1364,8 +1360,6 @@ function startDeskDrag(e, deskId, deskEl){
     startPositions[id] = { x: layout[id].x, y: layout[id].y };
   });
 
-  // --- Set up alignment guide tracking (Edit Layout mode only, which is the
-  // only place this function is ever called from) ---
   const roomEl = document.getElementById('room');
   const roomRectStart = roomEl.getBoundingClientRect();
   const SNAP_THRESHOLD = 6;
@@ -1470,7 +1464,6 @@ function startDeskDrag(e, deskId, deskEl){
     guideContainer.remove();
 
     if(!moved){
-      // This was a click, not a drag.
       if(selectMode) toggleDeskSelection(deskId);
       return;
     }
@@ -1497,7 +1490,6 @@ function exportPDF(){
   const originalOverflow = room.style.overflow;
   const originalHeight = room.style.height;
 
-  // Expand room so the whole layout is captured, not just the visible scroll area
   room.classList.add('printing');
   room.style.overflow = 'visible';
   room.style.height = room.scrollHeight + 'px';
@@ -1514,16 +1506,13 @@ function exportPDF(){
     const origW = canvas.width / 2;
     const origH = canvas.height / 2;
 
-    // Standard Letter dimensions in both orientations
-    const landscapeW = 792, landscapeH = 612;   // 11 x 8.5
-    const portraitW = 612, portraitH = 792;     // 8.5 x 11
+    const landscapeW = 792, landscapeH = 612;
+    const portraitW = 612, portraitH = 792;
 
-    // Option A: keep as-is on a landscape page
     const scaleLandscape = Math.min(
       (landscapeW - margin * 2) / origW,
       (landscapeH - margin * 2 - headerSpace) / origH
     );
-    // Option B: rotate 90° onto a portrait page (swaps which dimension is which)
     const scalePortraitRotated = Math.min(
       (portraitW - margin * 2) / origH,
       (portraitH - margin * 2 - headerSpace) / origW
@@ -1536,8 +1525,6 @@ function exportPDF(){
     let nativeImgW = origW, nativeImgH = origH;
 
     if(useRotated){
-      // Rotate the captured chart 90° clockwise onto an offscreen canvas so
-      // it can fill a portrait page top-to-bottom.
       const rotated = document.createElement('canvas');
       rotated.width = canvas.height;
       rotated.height = canvas.width;
@@ -1573,7 +1560,7 @@ function exportPDF(){
 
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(20);
-    pdf.setTextColor(206, 31, 7); // matches --red
+    pdf.setTextColor(206, 31, 7);
     const currentTeacherName = document.getElementById('teacherNameInput').value.trim();
     const headerTitle = currentTeacherName ? `${currentTeacherName}: ${title}` : title;
     pdf.text(headerTitle, pageW / 2, margin, { align: 'center' });
