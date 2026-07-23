@@ -424,6 +424,7 @@
     <label>Class</label>
     <select id="classSelect"></select>
     <button class="secondary" onclick="openNewClassModal()">+ New Class</button>
+    <button class="secondary" onclick="renameClass()">Rename Class</button>
     <button class="secondary" onclick="deleteClass()">Delete Class</button>
   </div>
 
@@ -534,7 +535,7 @@
     <h3 style="color:var(--text);font-size:18px;">🪑 How This App Works</h3>
 
     <h3>Classes</h3>
-    <p>Create one entry per period (New Class). Each class has its own roster, desks, seating, and locks — switching the Class dropdown swaps everything at once. Set your <b>Teacher Name</b> once in the toolbar — it's saved automatically and appears on every printed PDF. <b>Delete Class</b> removes the selected class entirely, including its roster, desks, seating, and locks — this can't be undone.</p>
+    <p>Create one entry per period (New Class). Each class has its own roster, desks, seating, and locks — switching the Class dropdown swaps everything at once. <b>Rename Class</b> lets you change a class's name anytime without touching its roster, layout, or seating. Set your <b>Teacher Name</b> once in the toolbar — it's saved automatically and appears on every printed PDF. <b>Delete Class</b> removes the selected class entirely, including its roster, desks, seating, and locks — this can't be undone.</p>
 
     <h3>Adding students</h3>
     <ul>
@@ -744,6 +745,17 @@ function createNewClass(){
   closeNewClassModal();
   document.getElementById('classSelect').value = id;
   selectClass(id);
+}
+
+function renameClass(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  const sel = document.getElementById('classSelect');
+  const currentName = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : '';
+  const newName = prompt('New name for this class:', currentName);
+  if(!newName || !newName.trim() || newName.trim() === currentName) return;
+  db.ref(`${ROOT}/classes/${currentClassId}/name`).set(newName.trim());
+  document.getElementById('roomTitle').textContent = newName.trim();
+  setStatus('Class renamed');
 }
 
 function deleteClass(){
