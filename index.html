@@ -559,6 +559,7 @@
       <li>Click the × on any desk to remove that table (any seated student returns to Unassigned).</li>
       <li>Click the rotate icon (↻) to turn a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
       <li><b>Select Tables: On</b> lets you click tables to select them (blue outline). Drag any selected table and the whole selected group moves together, keeping their arrangement. <b>Duplicate Selected</b> clones the whole selected group — same layout, same rotations — placed just to the right, and auto-selects the copies so you can keep duplicating to build a row of matching groups fast. <b>Clear Selection</b> deselects everything.</li>
+      <li>While dragging any table, a thin blue guide line appears whenever an edge or center lines up with another table — and the table snaps right into place, just like Canva or PowerPoint.</li>
     </ul>
 
     <h3>Saved Layouts (Rows / Groups / etc.)</h3>
@@ -1309,6 +1310,18 @@ function render(){
 }
 
 /* ====== DESK DRAGGING / SELECTION ====== */
+function getLocalRect(el, roomRect, roomEl){
+  const r = el.getBoundingClientRect();
+  return {
+    left: r.left - roomRect.left + roomEl.scrollLeft,
+    right: r.right - roomRect.left + roomEl.scrollLeft,
+    top: r.top - roomRect.top + roomEl.scrollTop,
+    bottom: r.bottom - roomRect.top + roomEl.scrollTop,
+    centerX: (r.left + r.right) / 2 - roomRect.left + roomEl.scrollLeft,
+    centerY: (r.top + r.bottom) / 2 - roomRect.top + roomEl.scrollTop
+  };
+}
+
 function startDeskDrag(e, deskId, deskEl){
   if(e.target.tagName === 'SPAN') return; // clicked an icon, not a drag/select
 
@@ -1326,14 +1339,96 @@ function startDeskDrag(e, deskId, deskEl){
     startPositions[id] = { x: layout[id].x, y: layout[id].y };
   });
 
+  // --- Set up alignment guide tracking (Edit Layout mode only, which is the
+  // only place this function is ever called from) ---
+  const roomEl = document.getElementById('room');
+  const roomRectStart = roomEl.getBoundingClientRect();
+  const SNAP_THRESHOLD = 6;
+
+  const otherRects = [];
+  document.querySelectorAll('.desk[data-desk-id]').forEach(el=>{
+    if(groupIds.includes(el.dataset.deskId)) return;
+    otherRects.push(getLocalRect(el, roomRectStart, roomEl));
+  });
+
+  let groupBox = null;
+  groupIds.forEach(id=>{
+    const el = document.querySelector(`.desk[data-desk-id="${id}"]`);
+    if(!el) return;
+    const r = getLocalRect(el, roomRectStart, roomEl);
+    if(!groupBox){
+      groupBox = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    } else {
+      groupBox.left = Math.min(groupBox.left, r.left);
+      groupBox.right = Math.max(groupBox.right, r.right);
+      groupBox.top = Math.min(groupBox.top, r.top);
+      groupBox.bottom = Math.max(groupBox.bottom, r.bottom);
+    }
+  });
+
+  const guideContainer = document.createElement('div');
+  guideContainer.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:40;';
+  roomEl.appendChild(guideContainer);
+
+  function drawGuides(xTarget, yTarget){
+    guideContainer.innerHTML = '';
+    const w = roomEl.scrollWidth, h = roomEl.scrollHeight;
+    if(xTarget !== null){
+      const line = document.createElement('div');
+      line.style.cssText = `position:absolute;left:${xTarget}px;top:0;width:1px;height:${h}px;background:#2563eb;`;
+      guideContainer.appendChild(line);
+    }
+    if(yTarget !== null){
+      const line = document.createElement('div');
+      line.style.cssText = `position:absolute;top:${yTarget}px;left:0;height:1px;width:${w}px;background:#2563eb;`;
+      guideContainer.appendChild(line);
+    }
+  }
+
   let moved = false;
+  let lastDx = 0, lastDy = 0;
   deskEl.classList.add('dragging');
 
   function onMove(ev){
-    const dx = ev.clientX - startClientX;
-    const dy = ev.clientY - startClientY;
+    let dx = ev.clientX - startClientX;
+    let dy = ev.clientY - startClientY;
     if(Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
     if(!moved) return;
+
+    let xTarget = null, yTarget = null;
+
+    if(groupBox){
+      const curLeft = groupBox.left + dx, curRight = groupBox.right + dx, curCenterX = (curLeft + curRight) / 2;
+      const curTop = groupBox.top + dy, curBottom = groupBox.bottom + dy, curCenterY = (curTop + curBottom) / 2;
+
+      let bestXDelta = null, bestYDelta = null;
+
+      otherRects.forEach(r=>{
+        [[curLeft, r.left], [curLeft, r.right], [curLeft, r.centerX],
+         [curRight, r.left], [curRight, r.right], [curRight, r.centerX],
+         [curCenterX, r.centerX]].forEach(([cur, target])=>{
+          const d = target - cur;
+          if(Math.abs(d) <= SNAP_THRESHOLD && (bestXDelta === null || Math.abs(d) < Math.abs(bestXDelta))){
+            bestXDelta = d; xTarget = target;
+          }
+        });
+        [[curTop, r.top], [curTop, r.bottom], [curTop, r.centerY],
+         [curBottom, r.top], [curBottom, r.bottom], [curBottom, r.centerY],
+         [curCenterY, r.centerY]].forEach(([cur, target])=>{
+          const d = target - cur;
+          if(Math.abs(d) <= SNAP_THRESHOLD && (bestYDelta === null || Math.abs(d) < Math.abs(bestYDelta))){
+            bestYDelta = d; yTarget = target;
+          }
+        });
+      });
+
+      if(bestXDelta !== null) dx += bestXDelta;
+      if(bestYDelta !== null) dy += bestYDelta;
+    }
+
+    drawGuides(xTarget, yTarget);
+    lastDx = dx; lastDy = dy;
+
     groupIds.forEach(id=>{
       const el = document.querySelector(`.desk[data-desk-id="${id}"]`);
       if(el){
@@ -1343,10 +1438,11 @@ function startDeskDrag(e, deskId, deskEl){
     });
   }
 
-  function onUp(ev){
+  function onUp(){
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     deskEl.classList.remove('dragging');
+    guideContainer.remove();
 
     if(!moved){
       // This was a click, not a drag.
@@ -1354,12 +1450,10 @@ function startDeskDrag(e, deskId, deskEl){
       return;
     }
 
-    const dx = ev.clientX - startClientX;
-    const dy = ev.clientY - startClientY;
     const updates = {};
     groupIds.forEach(id=>{
-      updates[`${ROOT}/layouts/${currentClassId}/${id}/x`] = Math.max(0, startPositions[id].x + dx);
-      updates[`${ROOT}/layouts/${currentClassId}/${id}/y`] = Math.max(0, startPositions[id].y + dy);
+      updates[`${ROOT}/layouts/${currentClassId}/${id}/x`] = Math.max(0, startPositions[id].x + lastDx);
+      updates[`${ROOT}/layouts/${currentClassId}/${id}/y`] = Math.max(0, startPositions[id].y + lastDy);
     });
     db.ref().update(updates);
   }
