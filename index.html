@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -622,18 +623,32 @@
 
 <script>
 /* ====== FIREBASE CONFIG - REPLACE WITH YOUR PROJECT CONFIG ====== */
+// TODO: this is the "bathroom-check-out" project — paste its real apiKey,
+// messagingSenderId, and appId here (Firebase console > that project >
+// Settings > General > Your apps > Config).
+
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
+  apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
   authDomain: "bathroom-check-out.firebaseapp.com",
   databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
   projectId: "bathroom-check-out",
-  storageBucket: "bathroom-check-out.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  storageBucket: "bathroom-check-out.firebasestorage.app",
+  messagingSenderId: "385219454253",
+  appId: "1:385219454253:web:970acbfe28672f73c45fa4"
 };
+
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const ROOT = "seatingCharts";
+
+// Sign in anonymously so the database rules (auth != null) let this page
+// read/write. This is invisible — no login screen appears.
+const authReady = new Promise((resolve, reject) => {
+  firebase.auth().onAuthStateChanged(user => {
+    if (user) resolve(user);
+  });
+  firebase.auth().signInAnonymously().catch(reject);
+});
 
 /* ====== STATE ======
   layout[deskId] = {x, y, capacity, rotation}
@@ -1610,10 +1625,15 @@ function exportPDF(){
 }
 
 /* ====== INIT ====== */
-loadClassList();
-loadTemplateList();
-loadTeacherName();
-setViewMode('clean');
+authReady.then(() => {
+  loadClassList();
+  loadTemplateList();
+  loadTeacherName();
+  setViewMode('clean');
+}).catch(err => {
+  console.error("Anonymous sign-in failed:", err);
+  alert("Couldn't connect to the database (sign-in failed). Check your connection and reload the page.");
+});
 </script>
 </body>
 </html>
