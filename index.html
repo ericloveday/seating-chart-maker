@@ -1735,6 +1735,47 @@ function exportPDF(){
   });
 }
 
+/* ====== EXPOSE FUNCTIONS CALLED FROM INLINE HTML onclick/onchange/oninput ======
+   Everything above is scoped inside startApp(), so functions referenced by
+   name in the HTML (onclick="openNewClassModal()" etc.) need to be attached
+   to window explicitly — otherwise the browser can't find them. */
+window.saveTeacherName = saveTeacherName;
+window.saveTeacherNameWithStatus = saveTeacherNameWithStatus;
+window.openNewClassModal = openNewClassModal;
+window.closeNewClassModal = closeNewClassModal;
+window.createNewClass = createNewClass;
+window.renameClass = renameClass;
+window.deleteClass = deleteClass;
+window.setViewMode = setViewMode;
+window.handleCSV = handleCSV;
+window.clearRoster = clearRoster;
+window.applyTemplate = applyTemplate;
+window.saveAsTemplate = saveAsTemplate;
+window.deleteTemplate = deleteTemplate;
+window.generateGrid = generateGrid;
+window.addDesk = addDesk;
+window.clearLayout = clearLayout;
+window.toggleSelectMode = toggleSelectMode;
+window.duplicateSelected = duplicateSelected;
+window.clearSelection = clearSelection;
+window.randomizeAll = randomizeAll;
+window.clearSeats = clearSeats;
+window.exportPDF = exportPDF;
+window.openHelpModal = openHelpModal;
+window.closeHelpModal = closeHelpModal;
+window.addStudentManually = addStudentManually;
+window.dropOnUnassigned = dropOnUnassigned;
+window.removeDesk = removeDesk;
+window.editCapacity = editCapacity;
+window.rotateDesk = rotateDesk;
+window.toggleLock = toggleLock;
+window.cycleGender = cycleGender;
+window.renameStudent = renameStudent;
+window.removeStudent = removeStudent;
+window.unseatSlot = unseatSlot;
+window.seatStudent = seatStudent;
+window.dropOnSeat = dropOnSeat;
+
 /* ====== INIT ====== */
 loadClassList();
 loadTemplateList();
