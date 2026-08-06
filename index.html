@@ -30,6 +30,37 @@
     background:var(--bg);
     color:var(--text);
   }
+
+  /* ---------------- Sign-In Screen ---------------- */
+  #signin-screen {
+    position: fixed; inset: 0; background: var(--bg); z-index: 100000;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .signin-card {
+    background: var(--card); border-radius: 10px; box-shadow: 0 8px 30px rgba(0,0,0,.15);
+    max-width: 400px; width: 100%; overflow: hidden;
+  }
+  .signin-card-header {
+    background: var(--red); padding: 20px 24px; color: #fff;
+  }
+  .signin-card-header h1 { font-size: 1.3rem; font-weight: 800; margin: 0; }
+  .signin-card-body { padding: 24px; text-align: center; }
+  .signin-card-body p { font-size: 0.85rem; color: var(--muted); margin: 0 0 20px; line-height: 1.5; }
+  .google-btn {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    width: 100%; padding: 13px; background: #fff; color: #1f1f1f;
+    border: 1px solid var(--border); border-radius: 6px; font-family: 'Montserrat', sans-serif;
+    font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background 0.15s;
+  }
+  .google-btn:hover { background: #f2f2f2; }
+  .signin-error {
+    margin-top: 14px; padding: 10px 14px; background: #fdeceb; border: 1px solid var(--red);
+    color: var(--red-dark); border-radius: 6px; font-size: 0.82rem; display: none;
+  }
+  .signin-note { margin-top: 16px; font-size: 0.74rem; color: #999; }
+
+  #app-content { display: none; }
+
   header{
     background:var(--red);
     color:#fff;
@@ -51,6 +82,14 @@
     font-weight:600;
     opacity:.9;
   }
+  .header-right { display: flex; align-items: center; gap: 14px; }
+  #user-badge { font-size: 12px; opacity: .85; }
+  #signout-btn {
+    font-size: 11px; font-weight: 700; color: #fff; background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.4); padding: 6px 12px; border-radius: 6px; cursor: pointer;
+    font-family: 'Montserrat', sans-serif; text-transform: uppercase; letter-spacing: 0.05em;
+  }
+  #signout-btn:hover { background: rgba(255,255,255,0.25); }
   .toolbar{
     background:var(--card);
     border-bottom:1px solid var(--border);
@@ -434,9 +473,31 @@
 </head>
 <body>
 
+<div id="signin-screen">
+  <div class="signin-card">
+    <div class="signin-card-header">
+      <h1>Seating Chart Maker</h1>
+    </div>
+    <div class="signin-card-body">
+      <p>Sign in with your Cornerstone Google account. Your classes, rosters, and layouts are private to your account.</p>
+      <button class="google-btn" id="google-signin-btn">
+        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.85 2.09-1.82 2.73v2.27h2.94c1.72-1.59 2.68-3.93 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.81 5.96-2.18l-2.94-2.27c-.8.55-1.84.85-3.02.85-2.34 0-4.32-1.58-5.03-3.7H.96v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.97 10.7c-.18-.55-.28-1.13-.28-1.7s.1-1.15.28-1.7V4.96H.96C.35 6.17 0 7.55 0 9s.35 2.83.96 4.04l3.01-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.6-2.6C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.96 4.96l3.01 2.34C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
+        Sign in with Google
+      </button>
+      <div class="signin-error" id="signin-error"></div>
+      <p class="signin-note">Restricted to @cornerstonek12.org accounts</p>
+    </div>
+  </div>
+</div>
+
+<div id="app-content">
 <header>
   <h1>Seating Chart Maker</h1>
-  <div id="saveStatus">Ready</div>
+  <div class="header-right">
+    <span id="user-badge"></span>
+    <button id="signout-btn" onclick="doSignOut()">Sign Out</button>
+    <div id="saveStatus">Ready</div>
+  </div>
 </header>
 
 <div class="toolbar">
@@ -591,7 +652,7 @@
     </ul>
 
     <h3>Saved Layouts (Rows / Groups / etc.)</h3>
-    <p>Build a layout once, then <b>Save Current As...</b> and name it (e.g. "Rows" or "Lab Tables"). Later, pick it from the Saved Layout dropdown and click <b>Apply</b> to drop that same layout into any of your 6 classes. Applying a layout clears current seating for that class. Pick a layout and click <b>Delete</b> to remove it from the list permanently — this only deletes the saved template, not any class currently using that arrangement.</p>
+    <p>Build a layout once, then <b>Save Current As...</b> and name it (e.g. "Rows" or "Lab Tables"). Later, pick it from the Saved Layout dropdown and click <b>Apply</b> to drop that same layout into any of your classes. Applying a layout clears current seating for that class. Pick a layout and click <b>Delete</b> to remove it from the list permanently — this only deletes the saved template, not any class currently using that arrangement. Your saved layouts are private to your account, just like your classes.</p>
 
     <h3>Seating students (Edit Students mode)</h3>
     <ul>
@@ -620,13 +681,10 @@
     </div>
   </div>
 </div>
+</div><!-- /#app-content -->
 
 <script>
-/* ====== FIREBASE CONFIG - REPLACE WITH YOUR PROJECT CONFIG ====== */
-// TODO: this is the "bathroom-check-out" project — paste its real apiKey,
-// messagingSenderId, and appId here (Firebase console > that project >
-// Settings > General > Your apps > Config).
-
+/* ====== FIREBASE CONFIG ====== */
 const firebaseConfig = {
   apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
   authDomain: "bathroom-check-out.firebaseapp.com",
@@ -639,16 +697,69 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-const ROOT = "seatingCharts";
 
-// Sign in anonymously so the database rules (auth != null) let this page
-// read/write. This is invisible — no login screen appears.
-const authReady = new Promise((resolve, reject) => {
-  firebase.auth().onAuthStateChanged(user => {
-    if (user) resolve(user);
+const ALLOWED_DOMAIN = "cornerstonek12.org";
+
+// ROOT is set only after we know which teacher is signed in — everything
+// this teacher creates (classes, rosters, layouts, seating, locks, saved
+// templates, their display name) lives under seatingCharts/{their-uid},
+// which keeps every teacher's data private without needing a separate
+// Firebase project per person.
+let ROOT = null;
+
+const provider = new firebase.auth.GoogleAuthProvider();
+provider.setCustomParameters({ hd: ALLOWED_DOMAIN });
+
+const signinScreen = document.getElementById('signin-screen');
+const appContent = document.getElementById('app-content');
+const signinError = document.getElementById('signin-error');
+const userBadge = document.getElementById('user-badge');
+
+function showSigninError(msg){
+  signinError.textContent = msg;
+  signinError.style.display = 'block';
+}
+
+document.getElementById('google-signin-btn').addEventListener('click', () => {
+  signinError.style.display = 'none';
+  firebase.auth().signInWithPopup(provider).catch(err => {
+    console.error(err);
+    showSigninError('Sign-in failed. Please try again.');
   });
-  firebase.auth().signInAnonymously().catch(reject);
 });
+
+window.doSignOut = function(){
+  firebase.auth().signOut();
+};
+
+let appStarted = false;
+
+firebase.auth().onAuthStateChanged((user) => {
+  if(!user){
+    signinScreen.style.display = 'flex';
+    appContent.style.display = 'none';
+    return;
+  }
+
+  const email = user.email || "";
+  if(!email.endsWith("@" + ALLOWED_DOMAIN)){
+    showSigninError(`This tool is restricted to @${ALLOWED_DOMAIN} accounts. You signed in as ${email}.`);
+    firebase.auth().signOut();
+    return;
+  }
+
+  ROOT = "seatingCharts/" + user.uid;
+  signinScreen.style.display = 'none';
+  appContent.style.display = 'block';
+  userBadge.textContent = email;
+
+  if(!appStarted){
+    appStarted = true;
+    startApp();
+  }
+});
+
+function startApp(){
 
 /* ====== STATE ======
   layout[deskId] = {x, y, capacity, rotation}
@@ -1625,15 +1736,12 @@ function exportPDF(){
 }
 
 /* ====== INIT ====== */
-authReady.then(() => {
-  loadClassList();
-  loadTemplateList();
-  loadTeacherName();
-  setViewMode('clean');
-}).catch(err => {
-  console.error("Anonymous sign-in failed:", err);
-  alert("Couldn't connect to the database (sign-in failed). Check your connection and reload the page.");
-});
+loadClassList();
+loadTemplateList();
+loadTeacherName();
+setViewMode('clean');
+
+} // end startApp
 </script>
 </body>
 </html>
