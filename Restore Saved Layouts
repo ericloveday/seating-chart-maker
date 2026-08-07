@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Restore Saved Layouts</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0a0a0a;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:20px;}
+  .card{background:#1a1a1a;border-radius:10px;padding:32px;max-width:440px;width:100%;text-align:center;}
+  h1{font-size:1.2rem;margin:0 0 8px;}
+  p{color:#aaa;font-size:0.9rem;line-height:1.5;}
+  button{margin-top:16px;padding:12px 20px;border:none;border-radius:6px;background:#ce1f07;color:#fff;font-weight:700;font-size:0.9rem;cursor:pointer;width:100%;}
+  button:hover{background:#a31905;}
+  button:disabled{opacity:0.5;cursor:not-allowed;}
+  #status{margin-top:16px;font-size:0.85rem;font-weight:600;min-height:1.2em;}
+  #status.ok{color:#4ade80;}
+  #status.err{color:#f87171;}
+  #user{font-size:0.78rem;color:#888;margin-top:10px;}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>Restore Saved Layouts</h1>
+  <p>Signs you in with Google, then writes your two saved layouts ("Groups" and "Rows") directly to your account's data — no manual database editing needed.</p>
+  <button id="signin-btn">Sign in with Google</button>
+  <button id="restore-btn" style="display:none;">Restore My Layouts</button>
+  <div id="status"></div>
+  <div id="user"></div>
+</div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
+    authDomain: "bathroom-check-out.firebaseapp.com",
+    databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
+    projectId: "bathroom-check-out",
+    storageBucket: "bathroom-check-out.firebasestorage.app",
+    messagingSenderId: "385219454253",
+    appId: "1:385219454253:web:970acbfe28672f73c45fa4"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.database();
+
+  const ALLOWED_DOMAIN = "cornerstonek12.org";
+  const provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ hd: ALLOWED_DOMAIN });
+
+  const LAYOUTS = {
+    "tmpl_gatiiky": {
+      "desks": {
+        "d_0_0_36p": { "capacity": 2, "rotation": 180, "x": 141, "y": 25 },
+        "d_1_0_rkl": { "capacity": 2, "rotation": 90, "x": 109, "y": 146 },
+        "d_2_0_skq": { "capacity": 2, "rotation": 270, "x": 184, "y": 147 },
+        "desk_522p2ek": { "capacity": 2, "rotation": 90, "x": 431, "y": 373 },
+        "desk_ch8wust": { "capacity": 2, "rotation": 270, "x": 186, "y": 375 },
+        "desk_d8b71gd": { "capacity": 2, "rotation": 180, "x": 794, "y": 27 },
+        "desk_du8ocds": { "capacity": 2, "rotation": 90, "x": 762, "y": 148 },
+        "desk_gf5zdxv": { "capacity": 2, "rotation": 270, "x": 836, "y": 147 },
+        "desk_h9pp9dz": { "capacity": 2, "rotation": 270, "x": 839, "y": 374 },
+        "desk_j1kvpex": { "capacity": 2, "rotation": 180, "x": 463, "y": 24 },
+        "desk_jsowei2": { "capacity": 2, "rotation": 90, "x": 430, "y": 144 },
+        "desk_neyngul": { "capacity": 2, "rotation": 90, "x": 112, "y": 376 },
+        "desk_vcqcqrk": { "capacity": 2, "rotation": 90, "x": 765, "y": 375 },
+        "desk_vh846dy": { "capacity": 2, "rotation": 270, "x": 505, "y": 372 },
+        "desk_yhfswuo": { "capacity": 2, "rotation": 270, "x": 502, "y": 145 }
+      },
+      "name": "Groups"
+    },
+    "tmpl_ynlziw6": {
+      "desks": {
+        "d_0_0_36p": { "capacity": 2, "x": 61, "y": 15 },
+        "d_0_1_6wu": { "capacity": 2, "x": 281, "y": 15 },
+        "d_0_2_1o9": { "capacity": 2, "x": 501, "y": 15 },
+        "d_0_3_la4": { "capacity": 2, "x": 721, "y": 15 },
+        "d_0_4_o77": { "capacity": 2, "x": 941, "y": 15 },
+        "d_1_0_rkl": { "capacity": 2, "x": 61, "y": 115 },
+        "d_1_1_n5j": { "capacity": 2, "x": 281, "y": 115 },
+        "d_1_2_5hz": { "capacity": 2, "x": 501, "y": 115 },
+        "d_1_3_9t8": { "capacity": 2, "x": 721, "y": 115 },
+        "d_1_4_wkh": { "capacity": 2, "x": 941, "y": 115 },
+        "d_2_0_skq": { "capacity": 2, "x": 61, "y": 215 },
+        "d_2_1_s97": { "capacity": 2, "x": 281, "y": 215 },
+        "d_2_2_k6s": { "capacity": 2, "x": 501, "y": 215 },
+        "d_2_3_cjs": { "capacity": 2, "x": 721, "y": 215 },
+        "d_2_4_484": { "capacity": 2, "x": 941, "y": 215 }
+      },
+      "name": "Rows"
+    }
+  };
+
+  const signinBtn = document.getElementById('signin-btn');
+  const restoreBtn = document.getElementById('restore-btn');
+  const statusEl = document.getElementById('status');
+  const userEl = document.getElementById('user');
+
+  function setStatus(msg, cls) {
+    statusEl.textContent = msg;
+    statusEl.className = cls || '';
+  }
+
+  signinBtn.addEventListener('click', () => {
+    setStatus('');
+    auth.signInWithPopup(provider).catch(err => {
+      console.error(err);
+      setStatus('Sign-in failed: ' + err.message, 'err');
+    });
+  });
+
+  auth.onAuthStateChanged(user => {
+    if (!user) {
+      signinBtn.style.display = 'block';
+      restoreBtn.style.display = 'none';
+      userEl.textContent = '';
+      return;
+    }
+    const email = user.email || '';
+    if (!email.endsWith('@' + ALLOWED_DOMAIN)) {
+      setStatus('This tool is restricted to @' + ALLOWED_DOMAIN + ' accounts.', 'err');
+      auth.signOut();
+      return;
+    }
+    signinBtn.style.display = 'none';
+    restoreBtn.style.display = 'block';
+    userEl.textContent = 'Signed in as ' + email + ' (UID: ' + user.uid + ')';
+  });
+
+  restoreBtn.addEventListener('click', async () => {
+    const user = auth.currentUser;
+    if (!user) return;
+    restoreBtn.disabled = true;
+    setStatus('Writing your layouts...');
+    try {
+      await db.ref('seatingCharts/' + user.uid + '/layoutTemplates').update(LAYOUTS);
+      setStatus('✓ Done! "Groups" and "Rows" are now saved to your account. You can close this page and reload the Seating Chart Maker.', 'ok');
+    } catch (err) {
+      console.error(err);
+      setStatus('Error: ' + err.message, 'err');
+      restoreBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
