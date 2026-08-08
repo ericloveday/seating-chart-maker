@@ -194,6 +194,12 @@
     background:var(--red-dark);
     box-shadow:inset 0 0 0 2px #fff;
   }
+  #doneBtn{
+    background:#1a7a3c;
+  }
+  #doneBtn:hover{
+    background:#145c2d;
+  }
   #app{
     display:flex;
     gap:0;
@@ -576,9 +582,9 @@
 
   <div class="group" data-mode="always">
     <label>View</label>
-    <button class="toggle" id="modeCleanBtn" onclick="setViewMode('clean')">👁 Clean View</button>
     <button class="toggle" id="modeStudentsBtn" onclick="setViewMode('editStudents')">🧑‍🤝‍🧑 Edit Students</button>
     <button class="toggle" id="modeLayoutBtn" onclick="setViewMode('editLayout')">📐 Edit Layout</button>
+    <button id="doneBtn" onclick="setViewMode('clean')" style="display:none;">✅ Done</button>
   </div>
 
   <div class="group" data-mode="students">
@@ -1205,9 +1211,9 @@ function setViewMode(mode){
     selectedDeskIds.clear();
   }
 
-  document.getElementById('modeCleanBtn').classList.toggle('active', mode === 'clean');
   document.getElementById('modeLayoutBtn').classList.toggle('active', mode === 'editLayout');
   document.getElementById('modeStudentsBtn').classList.toggle('active', mode === 'editStudents');
+  document.getElementById('doneBtn').style.display = (mode === 'clean') ? 'none' : 'block';
 
   document.querySelectorAll('.toolbar .group[data-mode]').forEach(group=>{
     const groupMode = group.dataset.mode;
