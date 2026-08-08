@@ -773,6 +773,7 @@ const ALLOWED_DOMAIN = "cornerstonek12.org";
 // which keeps every teacher's data private without needing a separate
 // Firebase project per person.
 let ROOT = null;
+let googleDisplayName = '';
 
 const provider = new firebase.auth.GoogleAuthProvider();
 provider.setCustomParameters({ hd: ALLOWED_DOMAIN });
@@ -816,6 +817,7 @@ firebase.auth().onAuthStateChanged((user) => {
   }
 
   ROOT = "seatingCharts/" + user.uid;
+  googleDisplayName = user.displayName || "";
   signinScreen.style.display = 'none';
   appContent.classList.add('shown');
   userBadge.textContent = email;
@@ -846,6 +848,15 @@ let selectMode = false;
 let selectedDeskIds = new Set();
 let teacherName = '';
 
+function formatTeacherNameFromGoogle(displayName){
+  const parts = (displayName || '').trim().split(/\s+/).filter(Boolean);
+  if(parts.length === 0) return '';
+  if(parts.length === 1) return parts[0];
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  return `${first.charAt(0).toUpperCase()}. ${last}`;
+}
+
 function loadTeacherName(){
   try{
     const cached = localStorage.getItem('scm_teacherName');
@@ -857,10 +868,22 @@ function loadTeacherName(){
   }catch(e){}
   db.ref(`${ROOT}/settings/teacherName`).on('value', snap=>{
     const val = snap.val();
-    if(val !== null && val !== undefined){
+    if(val !== null && val !== undefined && val !== ''){
       teacherName = val;
       const input = document.getElementById('teacherNameInput');
       if(document.activeElement !== input) input.value = val;
+    } else if(!teacherName && googleDisplayName){
+      // No saved name yet anywhere (Firebase or local cache) — default to
+      // the signed-in Google account's name, formatted as "F. Last".
+      const defaultName = formatTeacherNameFromGoogle(googleDisplayName);
+      if(defaultName){
+        teacherName = defaultName;
+        const input = document.getElementById('teacherNameInput');
+        if(input) input.value = defaultName;
+        db.ref(`${ROOT}/settings/teacherName`).set(defaultName).catch(err=>{
+          console.error('Default teacher name failed to save to Firebase:', err);
+        });
+      }
     }
   }, err=>{
     console.error('Teacher name failed to load from Firebase (check that "settings" is allowed in your database rules):', err);
