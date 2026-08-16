@@ -11,6 +11,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
   :root{
     --red:#ce1f07;
@@ -657,6 +658,10 @@
   </div>
 
   <div class="group" data-mode="always">
+    <button class="secondary" onclick="openSeatRosterModal()">🖨️ Seat Roster Report</button>
+  </div>
+
+  <div class="group" data-mode="always">
     <button class="secondary" onclick="openHelpModal()">❓ Cheat Sheet</button>
   </div>
 </div>
@@ -764,6 +769,20 @@
     </div>
   </div>
 </div>
+
+<div class="modalBg" id="seatRosterModal">
+  <div class="modal" style="width:360px;">
+    <h3>Seat Roster Report</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px 0;line-height:1.4;">
+      Pick the classes that share this same desk layout (e.g. Core 1–4). Each physical seat becomes one row, with a column per class showing who sits there.
+    </p>
+    <div id="seatRosterClassList" style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;margin-bottom:14px;padding:8px;border:1px solid var(--border);border-radius:8px;"></div>
+    <div class="btnRow">
+      <button class="secondary" onclick="closeSeatRosterModal()">Cancel</button>
+      <button onclick="generateSeatRosterReport()">Generate PDF</button>
+    </div>
+  </div>
+</div>
 </div><!-- /#app-content -->
 
 <script>
@@ -851,6 +870,7 @@ let viewMode = 'clean';
 let selectMode = false;
 let selectedDeskIds = new Set();
 let teacherName = '';
+let allClasses = {}; // {classId: {name, createdAt}} — kept in sync by loadClassList, used by the Seat Roster Report picker
 
 function formatTeacherNameFromGoogle(displayName){
   const parts = (displayName || '').trim().split(/\s+/).filter(Boolean);
@@ -935,6 +955,7 @@ function slugId(prefix){
 function loadClassList(){
   db.ref(`${ROOT}/classes`).on('value', snap => {
     const classes = snap.val() || {};
+    allClasses = classes;
     const sel = document.getElementById('classSelect');
     const prev = currentClassId;
     sel.innerHTML = '<option value="">-- select class --</option>';
@@ -994,6 +1015,157 @@ function closeNewClassModal(){ document.getElementById('newClassModal').classLis
 /* ====== HELP MODAL ====== */
 function openHelpModal(){ document.getElementById('helpModal').classList.add('show'); }
 function closeHelpModal(){ document.getElementById('helpModal').classList.remove('show'); }
+
+/* ====== SEAT ROSTER REPORT ======
+   Builds one printable table across several classes (e.g. Core 1-4) that
+   share the exact same desk layout. Seats are matched between classes by
+   their rounded (x,y) position + slot index, NOT by desk ID, so this still
+   works even if each class's desks were generated independently as long as
+   they land in the same spots. */
+function openSeatRosterModal(){
+  const list = document.getElementById('seatRosterClassList');
+  list.innerHTML = '';
+  const entries = Object.entries(allClasses)
+    .sort((a,b)=> a[1].name.localeCompare(b[1].name, undefined, {numeric:true, sensitivity:'base'}));
+  if(entries.length === 0){
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);">No classes yet.</div>';
+  }
+  entries.forEach(([id, c])=>{
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = id;
+    cb.style.width = 'auto';
+    if(id === currentClassId) cb.checked = true;
+    row.appendChild(cb);
+    row.appendChild(document.createTextNode(c.name));
+    list.appendChild(row);
+  });
+  document.getElementById('seatRosterModal').classList.add('show');
+}
+
+function closeSeatRosterModal(){
+  document.getElementById('seatRosterModal').classList.remove('show');
+}
+
+function posKey(x, y){
+  return Math.round(x) + ',' + Math.round(y);
+}
+
+function generateSeatRosterReport(){
+  const checked = Array.from(document.querySelectorAll('#seatRosterClassList input[type=checkbox]:checked')).map(cb=>cb.value);
+  if(checked.length === 0){ alert('Select at least one class first.'); return; }
+
+  const classIds = checked.sort((a,b)=> (allClasses[a].name).localeCompare(allClasses[b].name, undefined, {numeric:true, sensitivity:'base'}));
+
+  setStatus('Building report...');
+
+  const fetches = classIds.map(id => Promise.all([
+    db.ref(`${ROOT}/layouts/${id}`).once('value').then(s=>s.val()||{}),
+    db.ref(`${ROOT}/seating/${id}`).once('value').then(s=>s.val()||{}),
+    db.ref(`${ROOT}/rosters/${id}`).once('value').then(s=>s.val()||{})
+  ]));
+
+  Promise.all(fetches).then(results=>{
+    // results[i] = [layout, seating, roster] for classIds[i]
+
+    // Build a lookup per class: "x,y,slot" -> student name
+    const perClassSeatMap = classIds.map((id, i)=>{
+      const [layoutI, seatingI, rosterI] = results[i];
+      const map = {};
+      Object.entries(layoutI).forEach(([deskId, pos])=>{
+        const cap = pos.capacity || 1;
+        for(let slot=0; slot<cap; slot++){
+          const studentId = seatingI[deskId] ? seatingI[deskId][slot] : null;
+          const name = studentId && rosterI[studentId] ? rosterI[studentId].name : '';
+          map[`${posKey(pos.x,pos.y)},${slot}`] = name;
+        }
+      });
+      return map;
+    });
+
+    // Base seat ordering: use the layout from the class with the most desks
+    // (in case one class's layout is incomplete), read top-to-bottom, left-to-right.
+    let baseLayout = {};
+    let maxSeats = -1;
+    classIds.forEach((id, i)=>{
+      const layoutI = results[i][0];
+      const seatCount = Object.values(layoutI).reduce((sum,d)=> sum + (d.capacity||1), 0);
+      if(seatCount > maxSeats){ maxSeats = seatCount; baseLayout = layoutI; }
+    });
+
+    if(Object.keys(baseLayout).length === 0){
+      setStatus('Ready');
+      alert('None of the selected classes have any desks yet.');
+      return;
+    }
+
+    const deskEntries = Object.entries(baseLayout).sort((a,b)=>{
+      if(Math.abs(a[1].y - b[1].y) > 20) return a[1].y - b[1].y;
+      return a[1].x - b[1].x;
+    });
+
+    const rows = [];
+    let seatNum = 0;
+    deskEntries.forEach(([deskId, pos])=>{
+      const cap = pos.capacity || 1;
+      for(let slot=0; slot<cap; slot++){
+        seatNum++;
+        const key = `${posKey(pos.x,pos.y)},${slot}`;
+        const row = [String(seatNum)];
+        perClassSeatMap.forEach(map=>{
+          row.push(map[key] || '—');
+        });
+        rows.push(row);
+      }
+    });
+
+    const classNames = classIds.map(id => allClasses[id].name);
+    const head = [['Seat', ...classNames]];
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: rows.length > 20 ? 'portrait' : 'landscape', unit: 'pt', format: 'letter' });
+
+    const pageW = pdf.internal.pageSize.getWidth();
+    const margin = 30;
+
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(18);
+    pdf.setTextColor(206, 31, 7);
+    const currentTeacherName = document.getElementById('teacherNameInput').value.trim();
+    const titleText = currentTeacherName ? `${currentTeacherName}: Seat Roster Report` : 'Seat Roster Report';
+    pdf.text(titleText, pageW / 2, margin, { align: 'center' });
+
+    const now = new Date();
+    const dateStr = now.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+    const timeStr = now.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
+    pdf.setFont('helvetica', 'normal');
+    pdf.setFontSize(10);
+    pdf.setTextColor(100, 100, 100);
+    pdf.text(`${dateStr} ${timeStr}`, pageW / 2, margin + 14, { align: 'center' });
+
+    pdf.autoTable({
+      head,
+      body: rows,
+      startY: margin + 28,
+      theme: 'grid',
+      headStyles: { fillColor: [206, 31, 7], textColor: 255, fontStyle: 'bold', halign: 'center' },
+      bodyStyles: { halign: 'center', fontSize: 10 },
+      columnStyles: { 0: { fontStyle: 'bold', cellWidth: 40 } },
+      margin: { left: margin, right: margin }
+    });
+
+    const stamp = now.toISOString().slice(0,16).replace('T','_').replace(':','-');
+    pdf.save('Seat_Roster_Report_' + stamp + '.pdf');
+    closeSeatRosterModal();
+    setStatus('Report saved');
+  }).catch(err=>{
+    console.error('Seat roster report failed:', err);
+    setStatus('Ready');
+    alert('Could not build the report: ' + err.message);
+  });
+}
 
 function createNewClass(){
   const name = document.getElementById('newClassName').value.trim();
@@ -1872,6 +2044,9 @@ window.clearSeats = clearSeats;
 window.exportPDF = exportPDF;
 window.openHelpModal = openHelpModal;
 window.closeHelpModal = closeHelpModal;
+window.openSeatRosterModal = openSeatRosterModal;
+window.closeSeatRosterModal = closeSeatRosterModal;
+window.generateSeatRosterReport = generateSeatRosterReport;
 window.addStudentManually = addStudentManually;
 window.dropOnUnassigned = dropOnUnassigned;
 window.removeDesk = removeDesk;
