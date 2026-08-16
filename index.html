@@ -777,9 +777,12 @@
       Pick the classes that share this same desk layout (e.g. Core 1–4). Each physical seat becomes one row, with a column per class showing who sits there.
     </p>
     <div id="seatRosterClassList" style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;margin-bottom:14px;padding:8px;border:1px solid var(--border);border-radius:8px;"></div>
-    <div class="btnRow">
+    <div class="btnRow" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
       <button class="secondary" onclick="closeSeatRosterModal()">Cancel</button>
-      <button onclick="generateSeatRosterReport()">Generate PDF</button>
+      <div style="display:flex;gap:8px;">
+        <button class="secondary" onclick="generateDeskLabels()">🏷️ Desk Labels</button>
+        <button onclick="generateSeatRosterReport()">📋 Table Report</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1053,24 +1056,18 @@ function posKey(x, y){
   return Math.round(x) + ',' + Math.round(y);
 }
 
-function generateSeatRosterReport(){
-  const checked = Array.from(document.querySelectorAll('#seatRosterClassList input[type=checkbox]:checked')).map(cb=>cb.value);
-  if(checked.length === 0){ alert('Select at least one class first.'); return; }
-
-  const classIds = checked.sort((a,b)=> (allClasses[a].name).localeCompare(allClasses[b].name, undefined, {numeric:true, sensitivity:'base'}));
-
-  setStatus('Building report...');
-
+/* Shared data-gathering: fetches layout/seating/roster for each selected class,
+   matches seats across classes by physical position (not desk ID), and returns
+   one ordered row per physical seat with each class's student name in it.
+   Used by both the table report and the cut-apart desk labels. */
+function getSeatRosterData(classIds){
   const fetches = classIds.map(id => Promise.all([
     db.ref(`${ROOT}/layouts/${id}`).once('value').then(s=>s.val()||{}),
     db.ref(`${ROOT}/seating/${id}`).once('value').then(s=>s.val()||{}),
     db.ref(`${ROOT}/rosters/${id}`).once('value').then(s=>s.val()||{})
   ]));
 
-  Promise.all(fetches).then(results=>{
-    // results[i] = [layout, seating, roster] for classIds[i]
-
-    // Build a lookup per class: "x,y,slot" -> student name
+  return Promise.all(fetches).then(results=>{
     const perClassSeatMap = classIds.map((id, i)=>{
       const [layoutI, seatingI, rosterI] = results[i];
       const map = {};
@@ -1085,8 +1082,6 @@ function generateSeatRosterReport(){
       return map;
     });
 
-    // Base seat ordering: use the layout from the class with the most desks
-    // (in case one class's layout is incomplete), read top-to-bottom, left-to-right.
     let baseLayout = {};
     let maxSeats = -1;
     classIds.forEach((id, i)=>{
@@ -1096,9 +1091,7 @@ function generateSeatRosterReport(){
     });
 
     if(Object.keys(baseLayout).length === 0){
-      setStatus('Ready');
-      alert('None of the selected classes have any desks yet.');
-      return;
+      return { classNames: classIds.map(id=>allClasses[id].name), seatRows: [] };
     }
 
     const deskEntries = Object.entries(baseLayout).sort((a,b)=>{
@@ -1106,23 +1099,43 @@ function generateSeatRosterReport(){
       return a[1].x - b[1].x;
     });
 
-    const rows = [];
+    const seatRows = [];
     let seatNum = 0;
     deskEntries.forEach(([deskId, pos])=>{
       const cap = pos.capacity || 1;
       for(let slot=0; slot<cap; slot++){
         seatNum++;
         const key = `${posKey(pos.x,pos.y)},${slot}`;
-        const row = [String(seatNum)];
-        perClassSeatMap.forEach(map=>{
-          row.push(map[key] || '—');
-        });
-        rows.push(row);
+        const namesByClass = perClassSeatMap.map(map => map[key] || '');
+        seatRows.push({ seatNum, namesByClass });
       }
     });
 
-    const classNames = classIds.map(id => allClasses[id].name);
+    return { classNames: classIds.map(id=>allClasses[id].name), seatRows };
+  });
+}
+
+function getSelectedSeatRosterClassIds(){
+  const checked = Array.from(document.querySelectorAll('#seatRosterClassList input[type=checkbox]:checked')).map(cb=>cb.value);
+  if(checked.length === 0){ alert('Select at least one class first.'); return null; }
+  return checked.sort((a,b)=> (allClasses[a].name).localeCompare(allClasses[b].name, undefined, {numeric:true, sensitivity:'base'}));
+}
+
+function generateSeatRosterReport(){
+  const classIds = getSelectedSeatRosterClassIds();
+  if(!classIds) return;
+
+  setStatus('Building report...');
+
+  getSeatRosterData(classIds).then(({classNames, seatRows})=>{
+    if(seatRows.length === 0){
+      setStatus('Ready');
+      alert('None of the selected classes have any desks yet.');
+      return;
+    }
+
     const head = [['Seat', ...classNames]];
+    const rows = seatRows.map(r => [String(r.seatNum), ...r.namesByClass.map(n => n || '—')]);
 
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF({ orientation: rows.length > 20 ? 'portrait' : 'landscape', unit: 'pt', format: 'letter' });
@@ -1164,6 +1177,82 @@ function generateSeatRosterReport(){
     console.error('Seat roster report failed:', err);
     setStatus('Ready');
     alert('Could not build the report: ' + err.message);
+  });
+}
+
+/* Cut-apart desk labels: one small card per physical seat, four lines
+   (one per selected class), no seat number — meant to be printed, cut
+   apart, and taped to each desk so any teacher/sub sees who sits there
+   across every period that uses this room. */
+function generateDeskLabels(){
+  const classIds = getSelectedSeatRosterClassIds();
+  if(!classIds) return;
+
+  setStatus('Building labels...');
+
+  getSeatRosterData(classIds).then(({classNames, seatRows})=>{
+    if(seatRows.length === 0){
+      setStatus('Ready');
+      alert('None of the selected classes have any desks yet.');
+      return;
+    }
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+
+    const margin = 30;
+    const cols = 2, rows = 4;
+    const gutter = 14;
+    const cardW = (pageW - margin*2 - gutter*(cols-1)) / cols;
+    const cardH = (pageH - margin*2 - gutter*(rows-1)) / rows;
+    const perPage = cols * rows;
+
+    const now = new Date();
+    const stamp = now.toISOString().slice(0,16).replace('T','_').replace(':','-');
+
+    seatRows.forEach((seat, i)=>{
+      const posOnPage = i % perPage;
+      if(i > 0 && posOnPage === 0) pdf.addPage();
+
+      const col = posOnPage % cols;
+      const row = Math.floor(posOnPage / cols);
+      const x = margin + col * (cardW + gutter);
+      const y = margin + row * (cardH + gutter);
+
+      // Dashed cut-line border
+      pdf.setDrawColor(180, 180, 180);
+      pdf.setLineWidth(0.75);
+      if(pdf.setLineDashPattern) pdf.setLineDashPattern([4, 3], 0);
+      pdf.rect(x, y, cardW, cardH);
+      if(pdf.setLineDashPattern) pdf.setLineDashPattern([], 0);
+
+      // Four lines: "Class Name: Student Name"
+      const lineH = cardH / (classNames.length + 0.5);
+      classNames.forEach((className, idx)=>{
+        const name = seat.namesByClass[idx] || '(unassigned)';
+        const lineY = y + lineH * (idx + 1);
+
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(11);
+        pdf.setTextColor(206, 31, 7);
+        pdf.text(className + ':', x + 14, lineY, { align: 'left' });
+
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(14);
+        pdf.setTextColor(30, 30, 30);
+        pdf.text(name, x + cardW - 14, lineY, { align: 'right' });
+      });
+    });
+
+    pdf.save('Desk_Labels_' + stamp + '.pdf');
+    closeSeatRosterModal();
+    setStatus('Labels saved');
+  }).catch(err=>{
+    console.error('Desk labels failed:', err);
+    setStatus('Ready');
+    alert('Could not build the labels: ' + err.message);
   });
 }
 
@@ -2047,6 +2136,7 @@ window.closeHelpModal = closeHelpModal;
 window.openSeatRosterModal = openSeatRosterModal;
 window.closeSeatRosterModal = closeSeatRosterModal;
 window.generateSeatRosterReport = generateSeatRosterReport;
+window.generateDeskLabels = generateDeskLabels;
 window.addStudentManually = addStudentManually;
 window.dropOnUnassigned = dropOnUnassigned;
 window.removeDesk = removeDesk;
