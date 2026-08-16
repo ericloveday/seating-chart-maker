@@ -673,12 +673,12 @@
     <h2>Unassigned Students</h2>
     <div id="addStudentRow">
       <div class="addStudentFields">
-        <input type="text" id="newStudentName" placeholder="Add student name" onkeydown="if(event.key==='Enter'){addStudentManually();}">
-        <select id="newStudentGender" style="width:60px;">
+        <select id="newStudentGender" style="width:64px;flex:none;padding-right:4px;-webkit-appearance:menulist;appearance:menulist;">
           <option value="">-</option>
           <option value="M">M</option>
           <option value="F">F</option>
         </select>
+        <input type="text" id="newStudentName" placeholder="Add student name" onkeydown="if(event.key==='Enter'){addStudentManually();}">
       </div>
       <button id="addStudentSubmitBtn" onclick="addStudentManually()">+ Add Student</button>
     </div>
