@@ -651,6 +651,7 @@
       <input type="checkbox" id="alternateGenderToggle" style="width:auto;" checked> Alternate gender
     </label>
     <button class="secondary" onclick="clearSeats()">Clear Seats</button>
+    <button class="secondary" onclick="clearAllLocks()">🔓 Clear All Locks</button>
   </div>
 
   <div class="group" data-mode="always">
@@ -753,8 +754,9 @@
 
     <h3>Seat icons (visible in Edit Students mode)</h3>
     <ul>
-      <li><b>🔒 / 🔓</b> (bottom-right of a filled seat): click to lock/unlock that student. Locked students are skipped by Randomize/Reshuffle and protected from drag-and-drop.</li>
-      <li>The <b>undo arrow</b> (top-left of a filled seat): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
+      <li><b>🔒 / 🔓</b> (bottom-right of any seat, filled or empty): click to lock/unlock that seat. Locked seats — whether occupied or empty — are skipped by Place Students/Reshuffle and protected from drag-and-drop, so you can reserve an empty seat too, not just protect a seated student.</li>
+      <li>The <b>undo arrow</b> (top-left of a filled, unlocked seat): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
+      <li><b>🔓 Clear All Locks</b> (in Edit Students mode): unlocks every seat in the current class at once, without touching who's seated. Handy if locks ever get "stuck" on empty seats — for example, if <b>Clear Roster</b> is used to wipe students during a roster change, any seats that were locked will be released automatically as of the current version, but this button is here as a quick fix/reset if you ever end up with locked-but-empty seats.</li>
     </ul>
 
     <div class="tip">
@@ -1331,6 +1333,7 @@ function clearRoster(){
   if(!confirm(`Remove all ${count} students from this class's roster? This also clears seating for this class. This can't be undone.`)) return;
   db.ref(`${ROOT}/rosters/${currentClassId}`).remove();
   db.ref(`${ROOT}/seating/${currentClassId}`).remove();
+  db.ref(`${ROOT}/locks/${currentClassId}`).remove();
   setStatus('Roster cleared');
 }
 
@@ -1679,6 +1682,15 @@ function clearSeats(){
   db.ref(`${ROOT}/locks/${currentClassId}`).remove();
 }
 
+function clearAllLocks(){
+  if(!currentClassId) return;
+  const lockCount = Object.values(locks).reduce((sum, deskLocks)=> sum + Object.keys(deskLocks||{}).length, 0);
+  if(lockCount === 0){ alert('No seats are currently locked.'); return; }
+  if(!confirm(`Unlock all ${lockCount} locked seat(s) in this class? Any students in them stay seated — this only removes the lock.`)) return;
+  db.ref(`${ROOT}/locks/${currentClassId}`).remove();
+  setStatus('Locks cleared');
+}
+
 function seatStudent(deskId, slot, studentId){
   const updates = {};
   Object.entries(seating).forEach(([dId, seats])=>{
@@ -1774,15 +1786,15 @@ function render(){
       }
       seat.appendChild(label);
 
-      if(studentId && editingStudents){
+      if(editingStudents){
         const lockIcon = document.createElement('span');
         lockIcon.className = 'lockIcon';
         lockIcon.textContent = isLocked ? '🔒' : '🔓';
-        lockIcon.title = isLocked ? 'Unlock this seat' : 'Lock this student in place';
+        lockIcon.title = isLocked ? 'Unlock this seat' : 'Lock this seat in place';
         lockIcon.onclick = (e)=>{ e.stopPropagation(); toggleLock(deskId, i); };
         seat.appendChild(lockIcon);
 
-        if(!isLocked){
+        if(studentId && !isLocked){
           const removeIcon = document.createElement('span');
           removeIcon.className = 'removeSeatIcon';
           removeIcon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>';
@@ -2130,6 +2142,7 @@ window.duplicateSelected = duplicateSelected;
 window.clearSelection = clearSelection;
 window.randomizeAll = randomizeAll;
 window.clearSeats = clearSeats;
+window.clearAllLocks = clearAllLocks;
 window.exportPDF = exportPDF;
 window.openHelpModal = openHelpModal;
 window.closeHelpModal = closeHelpModal;
