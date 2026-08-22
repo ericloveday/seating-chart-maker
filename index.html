@@ -55,13 +55,13 @@
   .signin-card-header h1 { font-size: 1.3rem; font-weight: 800; margin: 0; }
   .signin-card-body { padding: 24px; text-align: center; }
   .signin-card-body p { font-size: 0.85rem; color: var(--muted); margin: 0 0 20px; line-height: 1.5; }
-  .google-btn {
-    display: flex; align-items: center; justify-content: center; gap: 10px;
-    width: 100%; padding: 13px; background: #fff; color: #1f1f1f;
-    border: 1px solid var(--border); border-radius: 6px; font-family: 'Montserrat', sans-serif;
-    font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: background 0.15s;
+  #login-form { text-align: left; }
+  #login-form label {
+    display: block; font-size: 0.72rem; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px; margin-top: 12px;
   }
-  .google-btn:hover { background: #f2f2f2; }
+  #login-form input { width: 100%; }
+  #login-btn { width: 100%; margin-top: 16px; }
   .signin-error {
     margin-top: 14px; padding: 10px 14px; background: #fdeceb; border: 1px solid var(--red);
     color: var(--red-dark); border-radius: 6px; font-size: 0.82rem; display: none;
@@ -69,6 +69,26 @@
   .signin-note { margin-top: 16px; font-size: 0.74rem; color: #999; }
 
   #app-content { display: none; }
+
+  #migrateBanner{
+    display:none;
+    background:#fff8e1;
+    color:#7a5c00;
+    padding:10px 16px;
+    text-align:center;
+    font-weight:600;
+    font-size:13px;
+    flex-shrink:0;
+    border-bottom:1px solid #f0d78c;
+  }
+  #migrateBanner button{
+    margin-left:10px;
+    background:#e6a817;
+    padding:6px 12px;
+    font-size:12px;
+  }
+  #migrateBanner button:hover{ background:#c98a00; }
+  #migrateStatus{ margin-left:10px; }
 
   header{
     background:var(--red);
@@ -556,18 +576,25 @@
       <h1>Seating Chart Maker</h1>
     </div>
     <div class="signin-card-body">
-      <p>Sign in with your Cornerstone Google account. Your classes, rosters, and layouts are private to your account.</p>
-      <button class="google-btn" id="google-signin-btn">
-        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.85 2.09-1.82 2.73v2.27h2.94c1.72-1.59 2.68-3.93 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.81 5.96-2.18l-2.94-2.27c-.8.55-1.84.85-3.02.85-2.34 0-4.32-1.58-5.03-3.7H.96v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.97 10.7c-.18-.55-.28-1.13-.28-1.7s.1-1.15.28-1.7V4.96H.96C.35 6.17 0 7.55 0 9s.35 2.83.96 4.04l3.01-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.6-2.6C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.96 4.96l3.01 2.34C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
-        Sign in with Google
-      </button>
+      <p>Sign in with your staff account. Your classes, rosters, and layouts are private to your account.</p>
+      <form id="login-form">
+        <label for="login-email">Email</label>
+        <input type="text" id="login-email" placeholder="you@cornerstonek12.org" autocomplete="username">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+        <button type="submit" id="login-btn">Sign In</button>
+      </form>
       <div class="signin-error" id="signin-error"></div>
-      <p class="signin-note">Restricted to @cornerstonek12.org accounts</p>
+      <p class="signin-note">Contact Eric Loveday for an account or a password reset.</p>
     </div>
   </div>
 </div>
 
 <div id="app-content">
+<div id="migrateBanner">
+  Don't see your old classes? <button id="migrateBtn">Migrate My Old Data</button>
+  <span id="migrateStatus"></span>
+</div>
 <header>
   <div class="header-left">
     <button id="panelToggle" onclick="togglePanel()" title="Show/hide controls">☰</button>
@@ -805,13 +832,17 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
+// Secondary, independent Firebase connection used ONLY for the one-time "migrate my old
+// data" flow below — signing in here with the old Google account doesn't touch or replace
+// the main email/password session above.
+const migrationApp = firebase.initializeApp(firebaseConfig, "migration");
+const migrationAuth = migrationApp.auth();
+const migrationDb = migrationApp.database();
 const ALLOWED_DOMAIN = "cornerstonek12.org";
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+googleProvider.setCustomParameters({ hd: ALLOWED_DOMAIN });
 
 let ROOT = null;
-let googleDisplayName = '';
-
-const provider = new firebase.auth.GoogleAuthProvider();
-provider.setCustomParameters({ hd: ALLOWED_DOMAIN });
 
 const signinScreen = document.getElementById('signin-screen');
 const appContent = document.getElementById('app-content');
@@ -823,11 +854,18 @@ function showSigninError(msg){
   signinError.style.display = 'block';
 }
 
-document.getElementById('google-signin-btn').addEventListener('click', () => {
+document.getElementById('login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
   signinError.style.display = 'none';
-  firebase.auth().signInWithPopup(provider).catch(err => {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!email || !password){
+    showSigninError('Enter both email and password.');
+    return;
+  }
+  firebase.auth().signInWithEmailAndPassword(email, password).catch(err => {
     console.error(err);
-    showSigninError('Sign-in failed. Please try again.');
+    showSigninError('Sign-in failed — check your email and password and try again.');
   });
 });
 
@@ -840,26 +878,63 @@ let appStarted = false;
 firebase.auth().onAuthStateChanged((user) => {
   if(!user){
     signinScreen.style.display = 'flex';
-    appContent.style.display = 'none';
-    return;
-  }
-
-  const email = user.email || "";
-  if(!email.endsWith("@" + ALLOWED_DOMAIN)){
-    showSigninError(`This tool is restricted to @${ALLOWED_DOMAIN} accounts. You signed in as ${email}.`);
-    firebase.auth().signOut();
+    appContent.classList.remove('shown');
     return;
   }
 
   ROOT = "seatingCharts/" + user.uid;
-  googleDisplayName = user.displayName || "";
   signinScreen.style.display = 'none';
   appContent.classList.add('shown');
-  userBadge.textContent = email;
+  userBadge.textContent = user.email || '';
 
   if(!appStarted){
     appStarted = true;
     startApp();
+  }
+});
+
+/* ====== ONE-TIME MIGRATION FROM OLD GOOGLE-BASED ACCOUNT ======
+   Seating charts are keyed by Firebase UID, so switching from Google sign-in to
+   email/password gives everyone a brand-new UID — old data doesn't move on its own.
+   This lets a teacher pull their existing classes over, once, by briefly signing into
+   their OLD Google account through a completely separate connection (migrationAuth),
+   reading their old data with THAT session's permissions, then writing it into the
+   current account with the MAIN session's permissions. Nothing is deleted from the
+   old location — it's a copy, not a move. */
+document.getElementById('migrateBtn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('migrateStatus');
+  const newUid = firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
+  if(!newUid){ return; }
+
+  statusEl.textContent = 'Signing in with your old Google account...';
+  try {
+    const result = await migrationAuth.signInWithPopup(googleProvider);
+    const oldUid = result.user.uid;
+
+    if(oldUid === newUid){
+      statusEl.textContent = "That's the account you're already signed into — nothing to migrate.";
+      await migrationAuth.signOut();
+      return;
+    }
+
+    statusEl.textContent = 'Copying your data...';
+    const snap = await migrationDb.ref('seatingCharts/' + oldUid).once('value');
+    const oldData = snap.val();
+
+    if(!oldData){
+      statusEl.textContent = 'No existing data found under that Google account.';
+      await migrationAuth.signOut();
+      return;
+    }
+
+    await db.ref('seatingCharts/' + newUid).set(oldData);
+    await migrationAuth.signOut();
+    statusEl.textContent = '✓ Migration complete! Your classes should appear now.';
+    document.getElementById('migrateBanner').style.display = 'none';
+  } catch(err) {
+    console.error('Migration failed:', err);
+    statusEl.textContent = 'Migration failed: ' + err.message;
+    try { await migrationAuth.signOut(); } catch(e){}
   }
 });
 
@@ -877,15 +952,6 @@ let selectedDeskIds = new Set();
 let teacherName = '';
 let allClasses = {}; // {classId: {name, createdAt}} — kept in sync by loadClassList, used by the Seat Roster Report picker
 
-function formatTeacherNameFromGoogle(displayName){
-  const parts = (displayName || '').trim().split(/\s+/).filter(Boolean);
-  if(parts.length === 0) return '';
-  if(parts.length === 1) return parts[0];
-  const first = parts[0];
-  const last = parts[parts.length - 1];
-  return `${first.charAt(0).toUpperCase()}. ${last}`;
-}
-
 function loadTeacherName(){
   try{
     const cached = localStorage.getItem('scm_teacherName');
@@ -901,16 +967,6 @@ function loadTeacherName(){
       teacherName = val;
       const input = document.getElementById('teacherNameInput');
       if(document.activeElement !== input) input.value = val;
-    } else if(!teacherName && googleDisplayName){
-      const defaultName = formatTeacherNameFromGoogle(googleDisplayName);
-      if(defaultName){
-        teacherName = defaultName;
-        const input = document.getElementById('teacherNameInput');
-        if(input) input.value = defaultName;
-        db.ref(`${ROOT}/settings/teacherName`).set(defaultName).catch(err=>{
-          console.error('Default teacher name failed to save to Firebase:', err);
-        });
-      }
     }
   }, err=>{
     console.error('Teacher name failed to load from Firebase (check that "settings" is allowed in your database rules):', err);
@@ -961,6 +1017,15 @@ function loadClassList(){
   db.ref(`${ROOT}/classes`).on('value', snap => {
     const classes = snap.val() || {};
     allClasses = classes;
+
+    // Show the one-time migration banner only if this account has no classes yet.
+    const migrateBanner = document.getElementById('migrateBanner');
+    if(migrateBanner){
+      migrateBanner.style.display = Object.keys(classes).length === 0 ? 'flex' : 'none';
+      migrateBanner.style.justifyContent = 'center';
+      migrateBanner.style.alignItems = 'center';
+    }
+
     const sel = document.getElementById('classSelect');
     const prev = currentClassId;
     sel.innerHTML = '<option value="">-- select class --</option>';
