@@ -592,8 +592,7 @@
 
 <div id="app-content">
 <div id="migrateBanner">
-  Don't see your old classes? <button id="migrateBtn">Migrate My Old Data</button>
-  <span id="migrateStatus"></span>
+  Don't see your old classes? <button id="migrateOpenBtn">Migrate My Old Data</button>
 </div>
 <header>
   <div class="header-left">
@@ -815,6 +814,24 @@
     </div>
   </div>
 </div>
+
+<div class="modalBg" id="migrateModal">
+  <div class="modal" style="width:480px;">
+    <h3>Migrate Old Data</h3>
+    <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px;">
+      1. Open <a href="https://console.firebase.google.com/project/bathroom-check-out/database/bathroom-check-out-default-rtdb/data/seatingCharts" target="_blank">Firebase Console → Realtime Database</a> in a new tab (you're already signed into that as yourself — no need to sign in again here).<br>
+      2. Under <code>seatingCharts</code>, find the ID holding your old classes (it'll have <code>classes</code>, <code>rosters</code>, etc. inside it).<br>
+      3. Hover that row, click the ⋮ menu, choose <b>Export JSON</b> — this downloads a file.<br>
+      4. Open that file, copy everything, and paste it below.
+    </p>
+    <textarea id="migratePasteArea" placeholder="Paste the exported JSON here..." style="width:100%;min-height:160px;font-family:monospace;font-size:12px;"></textarea>
+    <div class="btnRow">
+      <button class="secondary" onclick="closeMigrateModal()">Cancel</button>
+      <button onclick="importPastedData()">Import</button>
+    </div>
+    <p id="migrateStatus" style="font-size:12px;margin-top:10px;"></p>
+  </div>
+</div>
 </div><!-- /#app-content -->
 
 <script>
@@ -831,16 +848,6 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
-
-// Secondary, independent Firebase connection used ONLY for the one-time "migrate my old
-// data" flow below — signing in here with the old Google account doesn't touch or replace
-// the main email/password session above.
-const migrationApp = firebase.initializeApp(firebaseConfig, "migration");
-const migrationAuth = migrationApp.auth();
-const migrationDb = migrationApp.database();
-const ALLOWED_DOMAIN = "cornerstonek12.org";
-const googleProvider = new firebase.auth.GoogleAuthProvider();
-googleProvider.setCustomParameters({ hd: ALLOWED_DOMAIN });
 
 let ROOT = null;
 
@@ -896,47 +903,58 @@ firebase.auth().onAuthStateChanged((user) => {
 /* ====== ONE-TIME MIGRATION FROM OLD GOOGLE-BASED ACCOUNT ======
    Seating charts are keyed by Firebase UID, so switching from Google sign-in to
    email/password gives everyone a brand-new UID — old data doesn't move on its own.
-   This lets a teacher pull their existing classes over, once, by briefly signing into
-   their OLD Google account through a completely separate connection (migrationAuth),
-   reading their old data with THAT session's permissions, then writing it into the
-   current account with the MAIN session's permissions. Nothing is deleted from the
-   old location — it's a copy, not a move. */
-document.getElementById('migrateBtn').addEventListener('click', async () => {
+   Rather than trying another Google sign-in inside this app (the exact thing we
+   switched away from because it wasn't working reliably), this pulls the old data
+   in manually: export it as JSON directly from Firebase Console — which is Google's
+   own already-authenticated tool, unrelated to this app's sign-in — then paste it
+   here. The import itself just writes to the CURRENT (already signed-in) account,
+   so no additional authentication of any kind is needed. Nothing is deleted from
+   the old location — this is a copy, not a move. */
+document.getElementById('migrateOpenBtn').addEventListener('click', () => {
+  document.getElementById('migrateModal').classList.add('show');
+});
+
+window.closeMigrateModal = function(){
+  document.getElementById('migrateModal').classList.remove('show');
+};
+
+window.importPastedData = async function(){
   const statusEl = document.getElementById('migrateStatus');
+  const raw = document.getElementById('migratePasteArea').value.trim();
+
+  if(!raw){
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = 'Paste your exported data first.';
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch(e){
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = "That doesn't look like valid JSON — make sure you copied the entire exported file.";
+    return;
+  }
+
   const newUid = firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
   if(!newUid){ return; }
 
-  statusEl.textContent = 'Signing in with your old Google account...';
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = 'Importing...';
+
   try {
-    const result = await migrationAuth.signInWithPopup(googleProvider);
-    const oldUid = result.user.uid;
-
-    if(oldUid === newUid){
-      statusEl.textContent = "That's the account you're already signed into — nothing to migrate.";
-      await migrationAuth.signOut();
-      return;
-    }
-
-    statusEl.textContent = 'Copying your data...';
-    const snap = await migrationDb.ref('seatingCharts/' + oldUid).once('value');
-    const oldData = snap.val();
-
-    if(!oldData){
-      statusEl.textContent = 'No existing data found under that Google account.';
-      await migrationAuth.signOut();
-      return;
-    }
-
-    await db.ref('seatingCharts/' + newUid).set(oldData);
-    await migrationAuth.signOut();
-    statusEl.textContent = '✓ Migration complete! Your classes should appear now.';
+    await db.ref('seatingCharts/' + newUid).set(parsed);
+    statusEl.style.color = '#1a7a3c';
+    statusEl.textContent = '✓ Import complete! Your classes should appear now.';
     document.getElementById('migrateBanner').style.display = 'none';
-  } catch(err) {
-    console.error('Migration failed:', err);
-    statusEl.textContent = 'Migration failed: ' + err.message;
-    try { await migrationAuth.signOut(); } catch(e){}
+    setTimeout(() => { window.closeMigrateModal(); }, 1500);
+  } catch(err){
+    console.error('Import failed:', err);
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = 'Import failed: ' + err.message;
   }
-});
+};
 
 function startApp(){
 
