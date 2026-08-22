@@ -820,14 +820,17 @@
     <h3>Migrate Old Data</h3>
     <p style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px;">
       1. Open <a href="https://console.firebase.google.com/project/bathroom-check-out/database/bathroom-check-out-default-rtdb/data/seatingCharts" target="_blank">Firebase Console → Realtime Database</a> in a new tab (you're already signed into that as yourself — no need to sign in again here).<br>
-      2. Under <code>seatingCharts</code>, find the ID holding your old classes (it'll have <code>classes</code>, <code>rosters</code>, etc. inside it).<br>
-      3. Hover that row, click the ⋮ menu, choose <b>Export JSON</b> — this downloads a file.<br>
+      2. Under <code>seatingCharts</code>, click to <b>expand and open one specific ID</b> — the one holding your old classes (it'll show <code>classes</code>, <code>rosters</code>, etc. directly inside it once you're on that ID's row). Don't export the <code>seatingCharts</code> node itself — go one level deeper, into that specific ID.<br>
+      3. With that ID's row selected/highlighted, click the ⋮ menu → <b>Export JSON</b> — this downloads a file for just that one ID.<br>
       4. Open that file, copy everything, and paste it below.
     </p>
     <textarea id="migratePasteArea" placeholder="Paste the exported JSON here..." style="width:100%;min-height:160px;font-family:monospace;font-size:12px;"></textarea>
-    <div class="btnRow">
-      <button class="secondary" onclick="closeMigrateModal()">Cancel</button>
-      <button onclick="importPastedData()">Import</button>
+    <div class="btnRow" style="justify-content:space-between;">
+      <button class="secondary" onclick="resetMyData()" style="color:var(--red);border-color:var(--red);">Reset My Data</button>
+      <div style="display:flex;gap:8px;">
+        <button class="secondary" onclick="closeMigrateModal()">Cancel</button>
+        <button onclick="importPastedData()">Import</button>
+      </div>
     </div>
     <p id="migrateStatus" style="font-size:12px;margin-top:10px;"></p>
   </div>
@@ -916,6 +919,26 @@ document.getElementById('migrateOpenBtn').addEventListener('click', () => {
 
 window.closeMigrateModal = function(){
   document.getElementById('migrateModal').classList.remove('show');
+};
+
+window.resetMyData = async function(){
+  const statusEl = document.getElementById('migrateStatus');
+  const newUid = firebase.auth().currentUser ? firebase.auth().currentUser.uid : null;
+  if(!newUid){ return; }
+  if(!confirm('Clear everything currently in your account (classes, rosters, layouts, templates)? Use this to undo a bad import before trying again.')) return;
+
+  statusEl.style.color = 'var(--muted)';
+  statusEl.textContent = 'Clearing...';
+  try {
+    await db.ref('seatingCharts/' + newUid).remove();
+    statusEl.style.color = '#1a7a3c';
+    statusEl.textContent = '✓ Cleared. Ready to try the import again.';
+    document.getElementById('migratePasteArea').value = '';
+  } catch(err){
+    console.error('Reset failed:', err);
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = 'Reset failed: ' + err.message;
+  }
 };
 
 window.importPastedData = async function(){
