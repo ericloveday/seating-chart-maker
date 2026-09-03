@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kagan Team Importer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --red:#ce1f07;
+    --red-dark:#a31905;
+    --bg:#f4f5f7;
+    --card:#ffffff;
+    --border:#dfe2e6;
+    --text:#222;
+    --muted:#6b7280;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:'Montserrat',sans-serif;
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+  }
+  header{
+    background:var(--red);
+    color:#fff;
+    padding:16px 24px;
+  }
+  header h1{ margin:0; font-size:20px; font-weight:800; }
+  header p{ margin:4px 0 0; font-size:12px; opacity:.9; }
+  #wrap{ max-width:920px; margin:0 auto; padding:24px; display:flex; flex-direction:column; gap:20px; }
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:18px 20px;
+  }
+  .card h2{
+    font-size:14px;
+    text-transform:uppercase;
+    letter-spacing:.04em;
+    color:var(--muted);
+    margin:0 0 12px;
+  }
+  .card.disabled{ opacity:.45; pointer-events:none; }
+  label{ font-size:12px; font-weight:700; color:var(--muted); display:block; margin-bottom:6px; text-transform:uppercase; letter-spacing:.03em; }
+  input[type=text], input[type=password], select, textarea{
+    font-family:'Montserrat',sans-serif;
+    padding:8px 10px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-size:13px;
+    width:100%;
+  }
+  textarea{ min-height:140px; font-family:monospace; font-size:12px; }
+  button{
+    font-family:'Montserrat',sans-serif;
+    font-weight:700;
+    font-size:13px;
+    padding:9px 16px;
+    border:none;
+    border-radius:6px;
+    background:var(--red);
+    color:#fff;
+    cursor:pointer;
+  }
+  button:hover{ background:var(--red-dark); }
+  button.secondary{ background:#fff; color:var(--red); border:1.5px solid var(--red); }
+  button.secondary:hover{ background:#fdeceb; }
+  button:disabled{ background:#ccc; color:#888; cursor:not-allowed; }
+  .row{ display:flex; gap:16px; flex-wrap:wrap; }
+  .row > div{ flex:1; min-width:200px; }
+  .checkline{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; margin:8px 0; }
+  .checkline input{ width:auto; }
+  .note{ font-size:12px; color:var(--muted); line-height:1.5; margin-top:6px; }
+  .warn{
+    background:#fff8e1; border:1px solid #f0d78c; color:#7a5c00;
+    border-radius:8px; padding:10px 14px; font-size:12px; margin-top:10px;
+  }
+  table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:10px; }
+  th, td{ border:1px solid var(--border); padding:6px 8px; text-align:left; }
+  th{ background:#fafafa; font-size:11px; text-transform:uppercase; color:var(--muted); }
+  .podHeader{ background:#fdeceb; font-weight:800; color:var(--red-dark); }
+  #status{ font-size:13px; font-weight:700; min-height:18px; }
+  #status.ok{ color:#1a7a3c; }
+  #status.err{ color:var(--red); }
+  .signin-wrap{
+    display:flex; align-items:center; justify-content:center; min-height:100vh; padding:16px;
+  }
+  .signin-card{ max-width:380px; width:100%; }
+</style>
+</head>
+<body>
+
+<div id="signin-view" class="signin-wrap">
+  <div class="card signin-card">
+    <h2>Sign In</h2>
+    <p class="note">Use the same staff account you use in the Seating Chart Maker — this tool writes to the exact same data.</p>
+    <form id="login-form">
+      <label for="login-email">Email</label>
+      <input type="text" id="login-email" placeholder="you@cornerstonek12.org" autocomplete="username" style="margin-bottom:12px;">
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" style="margin-bottom:14px;">
+      <button type="submit" style="width:100%;">Sign In</button>
+    </form>
+    <div class="warn" id="signin-error" style="display:none;"></div>
+  </div>
+</div>
+
+<div id="app-view" style="display:none;">
+<header>
+  <h1>Kagan Team Importer</h1>
+  <p>Rank by score → snake-draft into balanced teams → seat into your existing pod layout.</p>
+</header>
+
+<div id="wrap">
+
+  <div class="card">
+    <h2>Step 1 · Class</h2>
+    <div class="row">
+      <div>
+        <label>Choose class</label>
+        <select id="classSelect"><option value="">-- select class --</option></select>
+      </div>
+    </div>
+    <div id="classInfo" class="note"></div>
+  </div>
+
+  <div class="card" id="csvCard">
+    <h2>Step 2 · Roster + Scores</h2>
+    <label>Paste or type CSV: <code>Last, First, Gender(M/F), Score</code> — one student per line</label>
+    <textarea id="csvText" placeholder="Smith, John, M, 87&#10;Doe, Jane, F, 93&#10;..."></textarea>
+    <div class="row" style="margin-top:8px;align-items:center;">
+      <div style="flex:none;">
+        <button class="secondary" onclick="document.getElementById('csvFile').click()">Or Upload CSV File</button>
+        <input type="file" id="csvFile" accept=".csv" style="display:none">
+      </div>
+      <div style="flex:none;">
+        <button onclick="buildPreview()">Build Team Preview</button>
+      </div>
+    </div>
+    <p class="note">A header row is fine — it's detected and skipped automatically. Gender is optional (leave blank if unused); Score is required for ranking.</p>
+  </div>
+
+  <div class="card" id="previewCard" style="display:none;">
+    <h2>Step 3 · Preview</h2>
+    <div id="previewSummary" class="note"></div>
+    <div id="previewTables"></div>
+  </div>
+
+  <div class="card" id="commitCard" style="display:none;">
+    <h2>Step 4 · Write to Firebase</h2>
+    <div class="checkline"><input type="checkbox" id="clearRosterChk" checked> Clear this class's existing roster first (recommended — avoids duplicate names)</div>
+    <div class="checkline"><input type="checkbox" id="clearSeatingChk" checked> Clear this class's existing seating &amp; locks first</div>
+    <div class="warn">This writes directly to your live data. There's no undo button here — if something looks wrong after, use "Clear Roster" / "Clear Seats" in the main Seating Chart Maker and re-run this import.</div>
+    <div style="margin-top:12px;">
+      <button onclick="commitToFirebase()">Commit Teams to Firebase</button>
+      <span id="status"></span>
+    </div>
+  </div>
+
+</div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
+  authDomain: "bathroom-check-out.firebaseapp.com",
+  databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
+  projectId: "bathroom-check-out",
+  storageBucket: "bathroom-check-out.firebasestorage.app",
+  messagingSenderId: "385219454253",
+  appId: "1:385219454253:web:970acbfe28672f73c45fa4"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let ROOT = null;
+let currentClassId = null;
+let currentLayout = {};
+let currentRosterCount = 0;
+let pods = [];        // [{deskId, capacity, label}] in pod-numbering order
+let teams = [];        // [{podLabel, deskId, members:[{name,gender,score}]}]
+let unseated = [];     // students who didn't fit in available seats
+
+document.getElementById('login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const errEl = document.getElementById('signin-error');
+  errEl.style.display = 'none';
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if(!email || !password){ errEl.textContent = 'Enter both email and password.'; errEl.style.display='block'; return; }
+  firebase.auth().signInWithEmailAndPassword(email, password).catch(err=>{
+    errEl.textContent = 'Sign-in failed — check your email and password and try again.';
+    errEl.style.display = 'block';
+  });
+});
+
+firebase.auth().onAuthStateChanged(user=>{
+  if(!user){
+    document.getElementById('signin-view').style.display = 'flex';
+    document.getElementById('app-view').style.display = 'none';
+    return;
+  }
+  ROOT = 'seatingCharts/' + user.uid;
+  document.getElementById('signin-view').style.display = 'none';
+  document.getElementById('app-view').style.display = 'block';
+  loadClasses();
+});
+
+function slugId(prefix){ return prefix + '_' + Math.random().toString(36).slice(2,9); }
+
+function loadClasses(){
+  db.ref(`${ROOT}/classes`).once('value').then(snap=>{
+    const classes = snap.val() || {};
+    const sel = document.getElementById('classSelect');
+    sel.innerHTML = '<option value="">-- select class --</option>';
+    Object.entries(classes)
+      .sort((a,b)=> a[1].name.localeCompare(b[1].name, undefined, {numeric:true, sensitivity:'base'}))
+      .forEach(([id,c])=>{
+        const opt = document.createElement('option');
+        opt.value = id; opt.textContent = c.name;
+        sel.appendChild(opt);
+      });
+  });
+}
+
+document.getElementById('classSelect').addEventListener('change', (e)=>{
+  currentClassId = e.target.value || null;
+  document.getElementById('previewCard').style.display = 'none';
+  document.getElementById('commitCard').style.display = 'none';
+  if(!currentClassId){
+    document.getElementById('classInfo').textContent = '';
+    return;
+  }
+  Promise.all([
+    db.ref(`${ROOT}/layouts/${currentClassId}`).once('value'),
+    db.ref(`${ROOT}/rosters/${currentClassId}`).once('value')
+  ]).then(([layoutSnap, rosterSnap])=>{
+    currentLayout = layoutSnap.val() || {};
+    currentRosterCount = Object.keys(rosterSnap.val() || {}).length;
+    const deskCount = Object.keys(currentLayout).length;
+    const seatCount = Object.values(currentLayout).reduce((s,d)=> s + (d.capacity||1), 0);
+    if(deskCount === 0){
+      document.getElementById('classInfo').innerHTML =
+        `<span style="color:var(--red);font-weight:700;">This class has no desks yet — build its layout in the main Seating Chart Maker first.</span>`;
+    } else {
+      document.getElementById('classInfo').innerHTML =
+        `Found <b>${deskCount}</b> table${deskCount!==1?'s':''} (<b>${seatCount}</b> seats total)` +
+        (currentRosterCount ? ` and an existing roster of <b>${currentRosterCount}</b> student${currentRosterCount!==1?'s':''}.` : ' and no existing roster.');
+    }
+  });
+});
+
+document.getElementById('csvFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{ document.getElementById('csvText').value = ev.target.result; };
+  reader.readAsText(file);
+});
+
+function parseCSV(text){
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const students = [];
+  lines.forEach((line, idx)=>{
+    const clean = line.replace(/["']/g,'');
+    const lower = clean.toLowerCase();
+    if(idx===0 && (lower.includes('last')||lower.includes('first')||lower.includes('score')||lower.includes('gender')||lower.includes('name'))){
+      return;
+    }
+    const parts = clean.split(',').map(s=>s.trim());
+    let name, gender = '', score = null;
+    if(parts.length >= 4){
+      name = `${parts[1]} ${parts[0]}`;
+      const g = parts[2].toUpperCase();
+      gender = g.startsWith('M') ? 'M' : g.startsWith('F') ? 'F' : '';
+      score = parseFloat(parts[3]);
+    } else if(parts.length === 3){
+      name = `${parts[1]} ${parts[0]}`;
+      score = parseFloat(parts[2]);
+    } else {
+      return;
+    }
+    if(!name.trim()) return;
+    students.push({ name: name.trim(), gender, score: isNaN(score) ? null : score });
+  });
+  return students;
+}
+
+/* Pods are numbered in reading order (top-to-bottom, left-to-right) purely
+   for display — actual desk IDs are what get written to. */
+function getPodsFromLayout(layout){
+  const entries = Object.entries(layout).sort((a,b)=>{
+    if(Math.abs(a[1].y - b[1].y) > 20) return a[1].y - b[1].y;
+    return a[1].x - b[1].x;
+  });
+  return entries.map(([deskId, pos], i)=> ({
+    deskId,
+    capacity: pos.capacity || 1,
+    label: `Pod ${i+1}`
+  }));
+}
+
+/* Snake / boustrophedon draft: round-robin forward through pods, then
+   backward, then forward again, skipping any pod that's already full,
+   so ability is balanced across teams even when pod sizes differ. */
+function snakeDraft(students, podsList){
+  const sorted = [...students].sort((a,b)=> (b.score ?? -Infinity) - (a.score ?? -Infinity));
+  const buckets = podsList.map(()=> []);
+  const capacities = podsList.map(p=> p.capacity);
+  let remaining = [...sorted];
+  let forward = true;
+  while(remaining.length){
+    const order = forward ? podsList.map((_,i)=>i) : podsList.map((_,i)=>i).reverse();
+    let placedAny = false;
+    for(const i of order){
+      if(remaining.length === 0) break;
+      if(buckets[i].length < capacities[i]){
+        buckets[i].push(remaining.shift());
+        placedAny = true;
+      }
+    }
+    forward = !forward;
+    if(!placedAny) break; // every pod full — whatever's left doesn't fit
+  }
+  // Order each team's members high-to-low so slot 0 is the team's top scorer.
+  buckets.forEach(b => b.sort((a,b2)=> (b2.score ?? -Infinity) - (a.score ?? -Infinity)));
+  return { buckets, leftover: remaining };
+}
+
+function buildPreview(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  if(Object.keys(currentLayout).length === 0){ alert('This class has no desks yet.'); return; }
+  const students = parseCSV(document.getElementById('csvText').value);
+  if(students.length === 0){ alert('No students parsed — check the CSV format.'); return; }
+  const missingScores = students.filter(s => s.score === null);
+  if(missingScores.length){
+    alert(`${missingScores.length} student(s) are missing a valid score and will be sorted to the bottom: ${missingScores.map(s=>s.name).join(', ')}`);
+    missingScores.forEach(s => s.score = -Infinity);
+  }
+
+  pods = getPodsFromLayout(currentLayout);
+  const { buckets, leftover } = snakeDraft(students, pods);
+  unseated = leftover;
+
+  teams = pods.map((pod, i)=> ({
+    podLabel: pod.label,
+    deskId: pod.deskId,
+    members: buckets[i]
+  }));
+
+  const totalSeats = pods.reduce((s,p)=> s + p.capacity, 0);
+  document.getElementById('previewSummary').innerHTML =
+    `<b>${students.length}</b> students → <b>${pods.length}</b> pods (<b>${totalSeats}</b> seats).` +
+    (unseated.length ? ` <span style="color:var(--red);font-weight:700;">${unseated.length} student(s) don't fit and will be added to the roster but left unseated: ${unseated.map(s=>s.name).join(', ')}.</span>` : '');
+
+  const tablesEl = document.getElementById('previewTables');
+  tablesEl.innerHTML = '';
+  teams.forEach(team=>{
+    const table = document.createElement('table');
+    const avg = team.members.length ? (team.members.reduce((s,m)=>s+(m.score===-Infinity?0:m.score),0)/team.members.length).toFixed(1) : '—';
+    table.innerHTML = `<tr><th colspan="4" class="podHeader">${team.podLabel} — team avg score: ${avg}</th></tr>
+      <tr><th>Seat</th><th>Name</th><th>Gender</th><th>Score</th></tr>` +
+      team.members.map((m,i)=> `<tr><td>${i+1}</td><td>${m.name}</td><td>${m.gender||'—'}</td><td>${m.score===-Infinity?'—':m.score}</td></tr>`).join('');
+    tablesEl.appendChild(table);
+  });
+
+  document.getElementById('previewCard').style.display = 'block';
+  document.getElementById('commitCard').style.display = 'block';
+}
+
+function commitToFirebase(){
+  if(!currentClassId || teams.length === 0){ alert('Build a preview first.'); return; }
+  const statusEl = document.getElementById('status');
+  statusEl.className = ''; statusEl.textContent = 'Writing...';
+
+  const clearRoster = document.getElementById('clearRosterChk').checked;
+  const clearSeating = document.getElementById('clearSeatingChk').checked;
+
+  const doWrite = () => {
+    const updates = {};
+    teams.forEach(team=>{
+      team.members.forEach((m, slot)=>{
+        const id = slugId('stu');
+        updates[`${ROOT}/rosters/${currentClassId}/${id}`] = { name: m.name, gender: m.gender || '' };
+        updates[`${ROOT}/seating/${currentClassId}/${team.deskId}/${slot}`] = id;
+      });
+    });
+    unseated.forEach(m=>{
+      const id = slugId('stu');
+      updates[`${ROOT}/rosters/${currentClassId}/${id}`] = { name: m.name, gender: m.gender || '' };
+    });
+
+    db.ref().update(updates).then(()=>{
+      statusEl.className = 'ok';
+      statusEl.textContent = '✓ Teams written! Open the Seating Chart Maker to view.';
+    }).catch(err=>{
+      statusEl.className = 'err';
+      statusEl.textContent = 'Write failed: ' + err.message;
+    });
+  };
+
+  const clearSteps = [];
+  if(clearRoster) clearSteps.push(db.ref(`${ROOT}/rosters/${currentClassId}`).remove());
+  if(clearSeating){
+    clearSteps.push(db.ref(`${ROOT}/seating/${currentClassId}`).remove());
+    clearSteps.push(db.ref(`${ROOT}/locks/${currentClassId}`).remove());
+  }
+  Promise.all(clearSteps).then(doWrite).catch(err=>{
+    statusEl.className = 'err';
+    statusEl.textContent = 'Clear step failed: ' + err.message;
+  });
+}
+</script>
+</body>
+</html>
