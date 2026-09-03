@@ -250,9 +250,10 @@ document.getElementById('classSelect').addEventListener('change', (e)=>{
       document.getElementById('classInfo').innerHTML =
         `<span style="color:var(--red);font-weight:700;">This class has no desks yet — build its layout in the main Seating Chart Maker first.</span>`;
     } else {
+      const podCount = clusterPods(currentLayout).length;
       document.getElementById('classInfo').innerHTML =
-        `Found <b>${deskCount}</b> table${deskCount!==1?'s':''} (<b>${seatCount}</b> seats total)` +
-        (currentRosterCount ? ` and an existing roster of <b>${currentRosterCount}</b> student${currentRosterCount!==1?'s':''}.` : ' and no existing roster.');
+        `Found <b>${deskCount}</b> stored table${deskCount!==1?'s':''} grouped into <b>${podCount}</b> pod${podCount!==1?'s':''} (<b>${seatCount}</b> seats total)` +
+        (currentRosterCount ? `, and an existing roster of <b>${currentRosterCount}</b> student${currentRosterCount!==1?'s':''}.` : ', and no existing roster.');
     }
   });
 });
@@ -293,18 +294,75 @@ function parseCSV(text){
   return students;
 }
 
-/* Pods are numbered in reading order (top-to-bottom, left-to-right) purely
-   for display — actual desk IDs are what get written to. */
-function getPodsFromLayout(layout){
-  const entries = Object.entries(layout).sort((a,b)=>{
-    if(Math.abs(a[1].y - b[1].y) > 20) return a[1].y - b[1].y;
-    return a[1].x - b[1].x;
+/* A Kagan "pod" is often built from more than one stored desk pushed
+   together (e.g. two 2-seat lab tables forming one 4-seat quad). This
+   clusters desks whose rectangles are touching/nearly-touching into a
+   single pod so a "team" matches what's physically sitting together in
+   the room, not just one row in Firebase. Pods are numbered in reading
+   order (top-to-bottom, left-to-right) purely for display. */
+function clusterPods(layout){
+  const ids = Object.keys(layout);
+  const GAP_THRESHOLD = 40; // px — desks closer than this count as one pod
+  const rects = {};
+  ids.forEach(id=>{
+    const d = layout[id];
+    const capacity = d.capacity || 1;
+    let w = capacity * 84 + (capacity - 1) * 4 + 8;
+    let h = 62;
+    const rot = ((d.rotation || 0) % 360 + 360) % 360;
+    if(rot === 90 || rot === 270){ const t = w; w = h; h = t; }
+    rects[id] = { left: d.x, top: d.y, right: d.x + w, bottom: d.y + h };
   });
-  return entries.map(([deskId, pos], i)=> ({
-    deskId,
-    capacity: pos.capacity || 1,
-    label: `Pod ${i+1}`
-  }));
+
+  const parent = {};
+  ids.forEach(id => parent[id] = id);
+  function find(x){ while(parent[x] !== x){ parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+  function union(a,b){ const ra = find(a), rb = find(b); if(ra !== rb) parent[ra] = rb; }
+
+  for(let i=0; i<ids.length; i++){
+    for(let j=i+1; j<ids.length; j++){
+      const a = rects[ids[i]], b = rects[ids[j]];
+      const dx = Math.max(b.left - a.right, a.left - b.right, 0);
+      const dy = Math.max(b.top - a.bottom, a.top - b.bottom, 0);
+      if(dx <= GAP_THRESHOLD && dy <= GAP_THRESHOLD) union(ids[i], ids[j]);
+    }
+  }
+
+  const groups = {};
+  ids.forEach(id=>{
+    const root = find(id);
+    (groups[root] = groups[root] || []).push(id);
+  });
+
+  const podsList = Object.values(groups).map(deskIds=>{
+    deskIds.sort((a,b)=>{
+      const A = layout[a], B = layout[b];
+      if(Math.abs(A.y - B.y) > 20) return A.y - B.y;
+      return A.x - B.x;
+    });
+    const capacity = deskIds.reduce((s,id)=> s + (layout[id].capacity || 1), 0);
+    const cx = deskIds.reduce((s,id)=> s + layout[id].x, 0) / deskIds.length;
+    const cy = deskIds.reduce((s,id)=> s + layout[id].y, 0) / deskIds.length;
+    return { deskIds, capacity, cx, cy };
+  });
+
+  podsList.sort((a,b)=>{
+    if(Math.abs(a.cy - b.cy) > 20) return a.cy - b.cy;
+    return a.cx - b.cx;
+  });
+  podsList.forEach((p,i)=> p.label = `Pod ${i+1}`);
+  return podsList;
+}
+
+/* Expands a pod's member desks into an ordered list of (deskId, slot)
+   pairs so team members can be assigned to real seats in desk order. */
+function podSeatSlots(pod, layout){
+  const slots = [];
+  pod.deskIds.forEach(deskId=>{
+    const cap = layout[deskId].capacity || 1;
+    for(let s=0; s<cap; s++) slots.push({ deskId, slot: s });
+  });
+  return slots;
 }
 
 /* Snake / boustrophedon draft: round-robin forward through pods, then
@@ -345,13 +403,13 @@ function buildPreview(){
     missingScores.forEach(s => s.score = -Infinity);
   }
 
-  pods = getPodsFromLayout(currentLayout);
+  pods = clusterPods(currentLayout);
   const { buckets, leftover } = snakeDraft(students, pods);
   unseated = leftover;
 
   teams = pods.map((pod, i)=> ({
     podLabel: pod.label,
-    deskId: pod.deskId,
+    seatSlots: podSeatSlots(pod, currentLayout),
     members: buckets[i]
   }));
 
@@ -386,10 +444,11 @@ function commitToFirebase(){
   const doWrite = () => {
     const updates = {};
     teams.forEach(team=>{
-      team.members.forEach((m, slot)=>{
+      team.members.forEach((m, i)=>{
         const id = slugId('stu');
+        const seat = team.seatSlots[i];
         updates[`${ROOT}/rosters/${currentClassId}/${id}`] = { name: m.name, gender: m.gender || '' };
-        updates[`${ROOT}/seating/${currentClassId}/${team.deskId}/${slot}`] = id;
+        updates[`${ROOT}/seating/${currentClassId}/${seat.deskId}/${seat.slot}`] = id;
       });
     });
     unseated.forEach(m=>{
