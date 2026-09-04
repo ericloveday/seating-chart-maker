@@ -302,7 +302,7 @@ function parseCSV(text){
    order (top-to-bottom, left-to-right) purely for display. */
 function clusterPods(layout){
   const ids = Object.keys(layout);
-  const GAP_THRESHOLD = 40; // px — desks closer than this count as one pod
+  const GAP_THRESHOLD = 12; // px — only desks truly snapped edge-to-edge count as one pod
   const rects = {};
   ids.forEach(id=>{
     const d = layout[id];
@@ -421,18 +421,27 @@ function buildPreview(){
   }));
 
   const totalSeats = pods.reduce((s,p)=> s + p.capacity, 0);
+  const capacityCounts = {};
+  pods.forEach(p => capacityCounts[p.capacity] = (capacityCounts[p.capacity]||0) + 1);
+  const modeCapacity = Object.keys(capacityCounts).reduce((a,b)=> capacityCounts[a] >= capacityCounts[b] ? a : b);
+  const oddPods = teams.filter(t => t.members.length + (0) !== Number(modeCapacity) && pods.find(p=>p.label===t.podLabel).capacity !== Number(modeCapacity));
+  const oddPodLabels = pods.filter(p => p.capacity !== Number(modeCapacity)).map(p=>`${p.label} (${p.capacity} seats)`);
+
   document.getElementById('previewSummary').innerHTML =
     `<b>${students.length}</b> students → <b>${pods.length}</b> pods (<b>${totalSeats}</b> seats).` +
-    (unseated.length ? ` <span style="color:var(--red);font-weight:700;">${unseated.length} student(s) don't fit and will be added to the roster but left unseated: ${unseated.map(s=>s.name).join(', ')}.</span>` : '');
+    (unseated.length ? ` <span style="color:var(--red);font-weight:700;">${unseated.length} student(s) don't fit and will be added to the roster but left unseated: ${unseated.map(s=>s.name).join(', ')}.</span>` : '') +
+    (oddPodLabels.length ? `<div class="warn" style="margin-top:8px;">⚠️ These pod(s) have a different seat count than the rest (${modeCapacity} is standard): <b>${oddPodLabels.join(', ')}</b>. This usually means two neighboring pods got merged together (or split apart) by the clustering — check their spacing in the Seating Chart Maker before trusting this import.</div>` : '');
 
   const ROLE_LABELS = ['H','HM','LM','L'];
   const tablesEl = document.getElementById('previewTables');
   tablesEl.innerHTML = '';
   teams.forEach(team=>{
     const table = document.createElement('table');
+    const pod = pods.find(p => p.label === team.podLabel);
+    const isOdd = pod.capacity !== Number(modeCapacity);
     const avg = team.members.length ? (team.members.reduce((s,m)=>s+(m.score===-Infinity?0:m.score),0)/team.members.length).toFixed(1) : '—';
     const showRoles = team.members.length === 4;
-    table.innerHTML = `<tr><th colspan="5" class="podHeader">${team.podLabel} — team avg score: ${avg}</th></tr>
+    table.innerHTML = `<tr><th colspan="5" class="podHeader"${isOdd ? ' style="background:#fdd;color:var(--red-dark);"' : ''}>${team.podLabel}${isOdd ? ' ⚠️ unexpected size' : ''} — team avg score: ${avg}</th></tr>
       <tr><th>Seat</th><th>Role</th><th>Name</th><th>Gender</th><th>Score</th></tr>` +
       team.members.map((m,i)=> `<tr><td>${i+1}</td><td>${showRoles ? ROLE_LABELS[i] : '—'}</td><td>${m.name}</td><td>${m.gender||'—'}</td><td>${m.score===-Infinity?'—':m.score}</td></tr>`).join('');
     tablesEl.appendChild(table);
