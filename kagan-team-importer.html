@@ -335,9 +335,16 @@ function clusterPods(layout){
   });
 
   const podsList = Object.values(groups).map(deskIds=>{
+    // Split into a top row and bottom row using this pod's OWN vertical
+    // midpoint (not a fixed pixel threshold) — robust to desks that were
+    // dragged into place and aren't perfectly row-aligned.
+    const ys = deskIds.map(id => layout[id].y);
+    const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
     deskIds.sort((a,b)=>{
       const A = layout[a], B = layout[b];
-      if(Math.abs(A.y - B.y) > 20) return A.y - B.y;
+      const rowA = A.y <= midY ? 0 : 1;
+      const rowB = B.y <= midY ? 0 : 1;
+      if(rowA !== rowB) return rowA - rowB;
       return A.x - B.x;
     });
     const capacity = deskIds.reduce((s,id)=> s + (layout[id].capacity || 1), 0);
@@ -418,14 +425,16 @@ function buildPreview(){
     `<b>${students.length}</b> students → <b>${pods.length}</b> pods (<b>${totalSeats}</b> seats).` +
     (unseated.length ? ` <span style="color:var(--red);font-weight:700;">${unseated.length} student(s) don't fit and will be added to the roster but left unseated: ${unseated.map(s=>s.name).join(', ')}.</span>` : '');
 
+  const ROLE_LABELS = ['H','HM','LM','L'];
   const tablesEl = document.getElementById('previewTables');
   tablesEl.innerHTML = '';
   teams.forEach(team=>{
     const table = document.createElement('table');
     const avg = team.members.length ? (team.members.reduce((s,m)=>s+(m.score===-Infinity?0:m.score),0)/team.members.length).toFixed(1) : '—';
-    table.innerHTML = `<tr><th colspan="4" class="podHeader">${team.podLabel} — team avg score: ${avg}</th></tr>
-      <tr><th>Seat</th><th>Name</th><th>Gender</th><th>Score</th></tr>` +
-      team.members.map((m,i)=> `<tr><td>${i+1}</td><td>${m.name}</td><td>${m.gender||'—'}</td><td>${m.score===-Infinity?'—':m.score}</td></tr>`).join('');
+    const showRoles = team.members.length === 4;
+    table.innerHTML = `<tr><th colspan="5" class="podHeader">${team.podLabel} — team avg score: ${avg}</th></tr>
+      <tr><th>Seat</th><th>Role</th><th>Name</th><th>Gender</th><th>Score</th></tr>` +
+      team.members.map((m,i)=> `<tr><td>${i+1}</td><td>${showRoles ? ROLE_LABELS[i] : '—'}</td><td>${m.name}</td><td>${m.gender||'—'}</td><td>${m.score===-Infinity?'—':m.score}</td></tr>`).join('');
     tablesEl.appendChild(table);
   });
 
