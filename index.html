@@ -635,6 +635,8 @@
     <button class="secondary" onclick="clearRoster()">Clear Roster</button>
     <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleCSV(event)">
     <span style="font-size:11px;color:var(--muted);">Format: Last, First, Gender(M/F) — one student per line. A header row is fine, it's skipped automatically. Uploading adds to the current roster — click Clear Roster first to fully replace it.</span>
+    <button class="secondary" onclick="window.open('https://ericloveday.github.io/seating-chart-maker/kagan-team-importer.html','_blank')" style="margin-top:4px;">🧩 Kagan Team Importer</button>
+    <span style="font-size:11px;color:var(--muted);">Opens a separate tool (same sign-in) that ranks students by score and auto-seats balanced Kagan teams into this class's existing pod layout.</span>
   </div>
 
   <div class="group" data-mode="layout">
@@ -746,6 +748,7 @@
       <li>Click the <b>(M)/(F)/(-)</b> badge on any unassigned student's chip to change their gender anytime.</li>
       <li>Click a student's <b>name</b> (in the Unassigned list or in a seat) to rename them — renaming doesn't move or unseat them.</li>
       <li><b>Clear Roster</b> removes every student from the current class at once (and clears seating too) — handy before uploading a whole new roster, since CSV upload only <i>adds</i> students rather than replacing the list.</li>
+      <li><b>🧩 Kagan Team Importer</b> (below Upload CSV): opens a separate companion tool in a new tab, signed in with the same account. Give it a CSV of names + test scores and it ranks students, snake-drafts them into balanced 4-person Kagan teams, and seats them directly into this class's existing pod layout — including an H/HM/LM/L role check and a visual map for confirming which desks form each pod before anything is written.</li>
     </ul>
 
     <h3>Three Views</h3>
