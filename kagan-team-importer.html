@@ -127,12 +127,28 @@
         <label>Choose class</label>
         <select id="classSelect"><option value="">-- select class --</option></select>
       </div>
+      <div>
+        <label>Seats per pod</label>
+        <input type="text" id="podSizeInput" value="4" style="width:80px;">
+      </div>
     </div>
     <div id="classInfo" class="note"></div>
   </div>
 
+  <div class="card" id="podMapCard" style="display:none;">
+    <h2>Step 2 · Confirm Pod Groupings</h2>
+    <p class="note">Colors show my best guess at which desks belong to the same pod. Click one desk, then click another to merge them together (or click two desks that already share a color to split them apart). Fix anything that doesn't match your actual room before moving on.</p>
+    <div id="podMapWrap" style="overflow:auto; border:1px solid var(--border); border-radius:8px; background:#fafafa;">
+      <svg id="podMapSvg" style="display:block;"></svg>
+    </div>
+    <div id="podLegend" style="margin-top:10px; font-size:12px; line-height:2;"></div>
+    <div style="margin-top:10px;">
+      <button class="secondary" onclick="resetPodMapAuto()">Reset to Auto-Detect</button>
+    </div>
+  </div>
+
   <div class="card" id="csvCard">
-    <h2>Step 2 · Roster + Scores</h2>
+    <h2>Step 3 · Roster + Scores</h2>
     <label>Paste or type CSV: <code>Last, First, Gender(M/F), Score</code> — one student per line</label>
     <textarea id="csvText" placeholder="Smith, John, M, 87&#10;Doe, Jane, F, 93&#10;..."></textarea>
     <div class="row" style="margin-top:8px;align-items:center;">
@@ -148,13 +164,13 @@
   </div>
 
   <div class="card" id="previewCard" style="display:none;">
-    <h2>Step 3 · Preview</h2>
+    <h2>Step 4 · Preview</h2>
     <div id="previewSummary" class="note"></div>
     <div id="previewTables"></div>
   </div>
 
   <div class="card" id="commitCard" style="display:none;">
-    <h2>Step 4 · Write to Firebase</h2>
+    <h2>Step 5 · Write to Firebase</h2>
     <div class="checkline"><input type="checkbox" id="clearRosterChk" checked> Clear this class's existing roster first (recommended — avoids duplicate names)</div>
     <div class="checkline"><input type="checkbox" id="clearSeatingChk" checked> Clear this class's existing seating &amp; locks first</div>
     <div class="warn">This writes directly to your live data. There's no undo button here — if something looks wrong after, use "Clear Roster" / "Clear Seats" in the main Seating Chart Maker and re-run this import.</div>
@@ -187,6 +203,9 @@ let currentRosterCount = 0;
 let pods = [];        // [{deskId, capacity, label}] in pod-numbering order
 let teams = [];        // [{podLabel, deskId, members:[{name,gender,score}]}]
 let unseated = [];     // students who didn't fit in available seats
+let deskGroupId = {};  // deskId -> pod group number, editable via the visual map
+let selectedDeskForMerge = null;
+const POD_PALETTE = ['#ce1f07','#1a7a3c','#2563eb','#a855f7','#d97706','#0891b2','#db2777','#65a30d','#7c3aed','#ea580c','#0d9488','#4b5563'];
 
 document.getElementById('login-form').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -230,10 +249,12 @@ function loadClasses(){
   });
 }
 
-document.getElementById('classSelect').addEventListener('change', (e)=>{
-  currentClassId = e.target.value || null;
-  document.getElementById('previewCard').style.display = 'none';
-  document.getElementById('commitCard').style.display = 'none';
+function getPodSize(){
+  const n = parseInt(document.getElementById('podSizeInput').value);
+  return (n && n > 0) ? n : 4;
+}
+
+function refreshClassInfo(){
   if(!currentClassId){
     document.getElementById('classInfo').textContent = '';
     return;
@@ -249,14 +270,26 @@ document.getElementById('classSelect').addEventListener('change', (e)=>{
     if(deskCount === 0){
       document.getElementById('classInfo').innerHTML =
         `<span style="color:var(--red);font-weight:700;">This class has no desks yet — build its layout in the main Seating Chart Maker first.</span>`;
+      document.getElementById('podMapCard').style.display = 'none';
     } else {
-      const podCount = clusterPods(currentLayout).length;
+      const podCount = clusterPods(currentLayout, getPodSize()).length;
       document.getElementById('classInfo').innerHTML =
         `Found <b>${deskCount}</b> stored table${deskCount!==1?'s':''} grouped into <b>${podCount}</b> pod${podCount!==1?'s':''} (<b>${seatCount}</b> seats total)` +
         (currentRosterCount ? `, and an existing roster of <b>${currentRosterCount}</b> student${currentRosterCount!==1?'s':''}.` : ', and no existing roster.');
+      document.getElementById('podMapCard').style.display = 'block';
+      resetPodMapAuto();
     }
   });
+}
+
+document.getElementById('classSelect').addEventListener('change', (e)=>{
+  currentClassId = e.target.value || null;
+  document.getElementById('previewCard').style.display = 'none';
+  document.getElementById('commitCard').style.display = 'none';
+  refreshClassInfo();
 });
+
+document.getElementById('podSizeInput').addEventListener('change', refreshClassInfo);
 
 document.getElementById('csvFile').addEventListener('change', (e)=>{
   const file = e.target.files[0];
@@ -295,14 +328,16 @@ function parseCSV(text){
 }
 
 /* A Kagan "pod" is often built from more than one stored desk pushed
-   together (e.g. two 2-seat lab tables forming one 4-seat quad). This
-   clusters desks whose rectangles are touching/nearly-touching into a
-   single pod so a "team" matches what's physically sitting together in
-   the room, not just one row in Firebase. Pods are numbered in reading
-   order (top-to-bottom, left-to-right) purely for display. */
-function clusterPods(layout){
+   together (e.g. two 2-seat lab tables forming one 4-seat quad). Rather
+   than relying on a fixed pixel distance to decide "touching" (fragile —
+   hand-dragged desks are never perfectly consistent), this merges the
+   physically CLOSEST pair of desks first, then the next closest, and so
+   on — stopping a merge whenever it would push a group over the target
+   pod size. This self-calibrates to however the room is actually laid
+   out instead of depending on one magic number. Pods are numbered in
+   reading order (top-to-bottom, left-to-right) purely for display. */
+function clusterPods(layout, targetCapacity){
   const ids = Object.keys(layout);
-  const GAP_THRESHOLD = 12; // px — only desks truly snapped edge-to-edge count as one pod
   const rects = {};
   ids.forEach(id=>{
     const d = layout[id];
@@ -314,19 +349,29 @@ function clusterPods(layout){
     rects[id] = { left: d.x, top: d.y, right: d.x + w, bottom: d.y + h };
   });
 
-  const parent = {};
-  ids.forEach(id => parent[id] = id);
+  const parent = {}, size = {};
+  ids.forEach(id=>{ parent[id] = id; size[id] = layout[id].capacity || 1; });
   function find(x){ while(parent[x] !== x){ parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
-  function union(a,b){ const ra = find(a), rb = find(b); if(ra !== rb) parent[ra] = rb; }
 
+  const edges = [];
   for(let i=0; i<ids.length; i++){
     for(let j=i+1; j<ids.length; j++){
       const a = rects[ids[i]], b = rects[ids[j]];
       const dx = Math.max(b.left - a.right, a.left - b.right, 0);
       const dy = Math.max(b.top - a.bottom, a.top - b.bottom, 0);
-      if(dx <= GAP_THRESHOLD && dy <= GAP_THRESHOLD) union(ids[i], ids[j]);
+      edges.push({ a: ids[i], b: ids[j], dist: Math.sqrt(dx*dx + dy*dy) });
     }
   }
+  edges.sort((e1,e2)=> e1.dist - e2.dist);
+
+  edges.forEach(({a,b})=>{
+    const ra = find(a), rb = find(b);
+    if(ra === rb) return;
+    if(size[ra] + size[rb] <= targetCapacity){
+      parent[ra] = rb;
+      size[rb] = size[ra] + size[rb];
+    }
+  });
 
   const groups = {};
   ids.forEach(id=>{
@@ -336,8 +381,7 @@ function clusterPods(layout){
 
   const podsList = Object.values(groups).map(deskIds=>{
     // Split into a top row and bottom row using this pod's OWN vertical
-    // midpoint (not a fixed pixel threshold) — robust to desks that were
-    // dragged into place and aren't perfectly row-aligned.
+    // midpoint — robust to desks that aren't perfectly row-aligned.
     const ys = deskIds.map(id => layout[id].y);
     const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
     deskIds.sort((a,b)=>{
@@ -370,6 +414,147 @@ function podSeatSlots(pod, layout){
     for(let s=0; s<cap; s++) slots.push({ deskId, slot: s });
   });
   return slots;
+}
+
+/* ====== VISUAL POD MAP (Step 2) ======
+   Auto-detection from geometry alone proved unreliable across real rooms,
+   so this renders every desk at its actual position, colored by a starting
+   guess, and lets the teacher click to merge/split pods directly — no more
+   guessing thresholds. */
+function deskRectFor(id, layout){
+  const d = layout[id];
+  const capacity = d.capacity || 1;
+  let w = capacity * 84 + (capacity - 1) * 4 + 8;
+  let h = 62;
+  const rot = ((d.rotation || 0) % 360 + 360) % 360;
+  if(rot === 90 || rot === 270){ const t = w; w = h; h = t; }
+  return { x: d.x, y: d.y, w, h };
+}
+
+function colorForGroup(g){ return POD_PALETTE[(g - 1) % POD_PALETTE.length]; }
+
+function resetPodMapAuto(){
+  const autoPods = clusterPods(currentLayout, getPodSize());
+  deskGroupId = {};
+  autoPods.forEach((p, idx)=>{ p.deskIds.forEach(id => deskGroupId[id] = idx + 1); });
+  selectedDeskForMerge = null;
+  renderPodMap();
+}
+
+function onDeskClick(id){
+  if(selectedDeskForMerge === null){
+    selectedDeskForMerge = id;
+  } else if(selectedDeskForMerge === id){
+    selectedDeskForMerge = null;
+  } else {
+    const groupA = deskGroupId[selectedDeskForMerge];
+    const groupB = deskGroupId[id];
+    if(groupA === groupB){
+      const newGroup = Math.max(...Object.values(deskGroupId)) + 1;
+      deskGroupId[id] = newGroup;
+    } else {
+      Object.keys(deskGroupId).forEach(k=>{ if(deskGroupId[k] === groupB) deskGroupId[k] = groupA; });
+    }
+    selectedDeskForMerge = null;
+  }
+  renderPodMap();
+}
+
+function renderPodLegend(){
+  const groups = {};
+  Object.entries(deskGroupId).forEach(([id, g])=>{
+    groups[g] = groups[g] || { seats: 0 };
+    groups[g].seats += (currentLayout[id].capacity || 1);
+  });
+  const target = getPodSize();
+  const legend = document.getElementById('podLegend');
+  legend.innerHTML = Object.entries(groups).map(([g, info])=>{
+    const color = colorForGroup(Number(g));
+    const mismatch = info.seats !== target;
+    return `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:14px;${mismatch ? 'color:var(--red);font-weight:700;' : 'color:var(--muted);'}">` +
+      `<span style="width:10px;height:10px;border-radius:2px;background:${color};display:inline-block;"></span>` +
+      `P${g}: ${info.seats} seat${info.seats !== 1 ? 's' : ''}${mismatch ? ' ⚠️' : ''}</span>`;
+  }).join('');
+}
+
+function renderPodMap(){
+  const ids = Object.keys(currentLayout);
+  const svg = document.getElementById('podMapSvg');
+  if(ids.length === 0){ svg.innerHTML = ''; return; }
+  const rects = {};
+  let maxX = 0, maxY = 0;
+  ids.forEach(id=>{
+    const r = deskRectFor(id, currentLayout);
+    rects[id] = r;
+    maxX = Math.max(maxX, r.x + r.w);
+    maxY = Math.max(maxY, r.y + r.h);
+  });
+  const pad = 20;
+  svg.setAttribute('viewBox', `0 0 ${maxX + pad} ${maxY + pad}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('height', Math.min(520, maxY + pad) + 'px');
+  svg.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg';
+  ids.forEach(id=>{
+    const r = rects[id];
+    const g = deskGroupId[id];
+    const color = colorForGroup(g);
+    const isSelected = selectedDeskForMerge === id;
+    const rectEl = document.createElementNS(ns, 'rect');
+    rectEl.setAttribute('x', r.x); rectEl.setAttribute('y', r.y);
+    rectEl.setAttribute('width', r.w); rectEl.setAttribute('height', r.h);
+    rectEl.setAttribute('rx', 6);
+    rectEl.setAttribute('fill', color);
+    rectEl.setAttribute('fill-opacity', '0.22');
+    rectEl.setAttribute('stroke', color);
+    rectEl.setAttribute('stroke-width', isSelected ? 4 : 2);
+    rectEl.style.cursor = 'pointer';
+    rectEl.addEventListener('click', ()=> onDeskClick(id));
+    svg.appendChild(rectEl);
+
+    const label = document.createElementNS(ns, 'text');
+    label.setAttribute('x', r.x + r.w / 2);
+    label.setAttribute('y', r.y + r.h / 2 + 4);
+    label.setAttribute('text-anchor', 'middle');
+    label.setAttribute('font-size', '12');
+    label.setAttribute('font-family', 'Montserrat, sans-serif');
+    label.setAttribute('font-weight', '700');
+    label.setAttribute('fill', color);
+    label.style.pointerEvents = 'none';
+    label.textContent = 'P' + g;
+    svg.appendChild(label);
+  });
+  renderPodLegend();
+}
+
+/* Builds the final pods list from the teacher's confirmed groupings
+   (deskGroupId), rather than re-guessing from geometry. */
+function podsFromManualGroups(){
+  const groups = {};
+  Object.entries(deskGroupId).forEach(([id, g])=>{
+    (groups[g] = groups[g] || []).push(id);
+  });
+  const podsList = Object.values(groups).map(deskIds=>{
+    const ys = deskIds.map(id => currentLayout[id].y);
+    const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
+    deskIds.sort((a,b)=>{
+      const A = currentLayout[a], B = currentLayout[b];
+      const rowA = A.y <= midY ? 0 : 1;
+      const rowB = B.y <= midY ? 0 : 1;
+      if(rowA !== rowB) return rowA - rowB;
+      return A.x - B.x;
+    });
+    const capacity = deskIds.reduce((s,id)=> s + (currentLayout[id].capacity || 1), 0);
+    const cx = deskIds.reduce((s,id)=> s + currentLayout[id].x, 0) / deskIds.length;
+    const cy = deskIds.reduce((s,id)=> s + currentLayout[id].y, 0) / deskIds.length;
+    return { deskIds, capacity, cx, cy };
+  });
+  podsList.sort((a,b)=>{
+    if(Math.abs(a.cy - b.cy) > 20) return a.cy - b.cy;
+    return a.cx - b.cx;
+  });
+  podsList.forEach((p,i)=> p.label = `Pod ${i+1}`);
+  return podsList;
 }
 
 /* Snake / boustrophedon draft: round-robin forward through pods, then
@@ -410,7 +595,8 @@ function buildPreview(){
     missingScores.forEach(s => s.score = -Infinity);
   }
 
-  pods = clusterPods(currentLayout);
+  if(Object.keys(deskGroupId).length === 0) resetPodMapAuto();
+  pods = podsFromManualGroups();
   const { buckets, leftover } = snakeDraft(students, pods);
   unseated = leftover;
 
