@@ -684,7 +684,7 @@
   </div>
 
   <div class="group" data-mode="always">
-    <button class="secondary" onclick="exportPDF()">📄 Export PDF</button>
+    <button class="secondary" onclick="openExportModal()">📄 Export PDF</button>
   </div>
 
   <div class="group" data-mode="always">
@@ -730,6 +730,23 @@
     <div class="btnRow">
       <button class="secondary" onclick="closeNewClassModal()">Cancel</button>
       <button onclick="createNewClass()">Create</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="exportModal">
+  <div class="modal" style="width:320px;">
+    <h3>Export PDF</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px 0;line-height:1.4;">
+      Choose a page orientation, or let it auto-pick whichever fills the page best for your layout.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+      <button class="secondary" onclick="exportPDF('auto')" style="width:100%;">🔄 Auto (Best Fit)</button>
+      <button class="secondary" onclick="exportPDF('landscape')" style="width:100%;">🖥️ Landscape</button>
+      <button class="secondary" onclick="exportPDF('portrait')" style="width:100%;">📄 Portrait</button>
+    </div>
+    <div class="btnRow">
+      <button class="secondary" onclick="closeExportModal()">Cancel</button>
     </div>
   </div>
 </div>
@@ -794,7 +811,7 @@
     </div>
 
     <h3>Exporting</h3>
-    <p>📄 Export PDF captures the current layout and automatically picks whichever page orientation prints it biggest — landscape as-is, or rotated 90° onto portrait — whichever fills more of the sheet for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version. Export PDF works from any of the three view modes.</p>
+    <p>📄 Export PDF opens a small picker so you can choose Landscape, Portrait, or Auto (Best Fit) — Auto captures the current layout and automatically picks whichever page orientation prints it biggest for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version. Export PDF works from any of the three view modes.</p>
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
@@ -2126,7 +2143,20 @@ function startDeskDrag(e, deskId, deskEl){
 }
 
 /* ====== EXPORT PDF ====== */
-function exportPDF(){
+function openExportModal(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  if(Object.keys(layout).length === 0){ alert('No desks to export yet.'); return; }
+  document.getElementById('exportModal').classList.add('show');
+}
+
+function closeExportModal(){
+  document.getElementById('exportModal').classList.remove('show');
+}
+
+function exportPDF(orientationChoice){
+  orientationChoice = orientationChoice || 'auto';
+  closeExportModal();
+
   if(!currentClassId){ alert('Select a class first.'); return; }
   const room = document.getElementById('room');
   if(Object.keys(layout).length === 0){ alert('No desks to export yet.'); return; }
@@ -2176,19 +2206,33 @@ function exportPDF(){
     const landscapeW = 792, landscapeH = 612;
     const portraitW = 612, portraitH = 792;
 
-    const scaleLandscape = Math.min(
-      (landscapeW - margin * 2) / origW,
-      (landscapeH - margin * 2 - headerSpace) / origH
-    );
-    const scalePortraitRotated = Math.min(
-      (portraitW - margin * 2) / origH,
-      (portraitH - margin * 2 - headerSpace) / origW
-    );
+    // useRotated only ever applies in 'auto' mode — it decides whether to
+    // rotate the captured canvas 90° so it fits a portrait page bigger than
+    // it would fit an unrotated landscape page. An explicit landscape/portrait
+    // choice always uses the canvas as-is, just scaled to that page size.
+    let useRotated = false;
+    let pageW, pageH, pdfOrientation;
 
-    const useRotated = scalePortraitRotated > scaleLandscape;
+    if(orientationChoice === 'landscape'){
+      pageW = landscapeW; pageH = landscapeH; pdfOrientation = 'landscape';
+    } else if(orientationChoice === 'portrait'){
+      pageW = portraitW; pageH = portraitH; pdfOrientation = 'portrait';
+    } else {
+      const scaleLandscape = Math.min(
+        (landscapeW - margin * 2) / origW,
+        (landscapeH - margin * 2 - headerSpace) / origH
+      );
+      const scalePortraitRotated = Math.min(
+        (portraitW - margin * 2) / origH,
+        (portraitH - margin * 2 - headerSpace) / origW
+      );
+      useRotated = scalePortraitRotated > scaleLandscape;
+      pageW = useRotated ? portraitW : landscapeW;
+      pageH = useRotated ? portraitH : landscapeH;
+      pdfOrientation = useRotated ? 'portrait' : 'landscape';
+    }
 
     let sourceCanvas = canvas;
-    let pageW = landscapeW, pageH = landscapeH, pdfOrientation = 'landscape';
     let nativeImgW = origW, nativeImgH = origH;
 
     if(useRotated){
@@ -2200,7 +2244,6 @@ function exportPDF(){
       rctx.rotate(Math.PI / 2);
       rctx.drawImage(canvas, 0, 0);
       sourceCanvas = rotated;
-      pageW = portraitW; pageH = portraitH; pdfOrientation = 'portrait';
       nativeImgW = rotated.width / 2;
       nativeImgH = rotated.height / 2;
     }
@@ -2276,6 +2319,8 @@ window.clearSelection = clearSelection;
 window.randomizeAll = randomizeAll;
 window.clearSeats = clearSeats;
 window.clearAllLocks = clearAllLocks;
+window.openExportModal = openExportModal;
+window.closeExportModal = closeExportModal;
 window.exportPDF = exportPDF;
 window.openHelpModal = openHelpModal;
 window.closeHelpModal = closeHelpModal;
