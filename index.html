@@ -2131,20 +2131,27 @@ function exportPDF(){
   const room = document.getElementById('room');
   if(Object.keys(layout).length === 0){ alert('No desks to export yet.'); return; }
 
-  const title = document.getElementById('roomTitle').textContent;
-  const originalOverflow = room.style.overflow;
-  const originalHeight = room.style.height;
+ const title = document.getElementById('roomTitle').textContent;
+const originalOverflow = room.style.overflow;
+const originalHeight = room.style.height;
+const originalWidth = room.style.width;
 
-  room.classList.add('printing');
-  room.style.overflow = 'visible';
-  room.style.height = room.scrollHeight + 'px';
+room.classList.add('printing');
+room.style.overflow = 'visible';
+// Lock in BOTH dimensions from scroll size before capture. Without the
+// width line, #room stays at whatever width:100% happens to render as
+// at the current window/zoom level, and any desk positioned past that
+// edge gets clipped by html2canvas even though overflow is visible.
+room.style.width = room.scrollWidth + 'px';
+room.style.height = room.scrollHeight + 'px';
 
-  setStatus('Building PDF...');
+setStatus('Building PDF...');
 
-  html2canvas(room, { backgroundColor: '#ffffff', scale: 2 }).then(canvas => {
-    room.classList.remove('printing');
-    room.style.overflow = originalOverflow;
-    room.style.height = originalHeight;
+html2canvas(room, { backgroundColor: '#ffffff', scale: 2 }).then(canvas => {
+  room.classList.remove('printing');
+  room.style.overflow = originalOverflow;
+  room.style.width = originalWidth;
+  room.style.height = originalHeight;
 
     const margin = 30;
     const headerSpace = 52;
