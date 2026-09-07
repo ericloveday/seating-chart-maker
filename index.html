@@ -370,6 +370,24 @@
     line-height:1;
     padding:2px;
   }
+  .seatNumberBadge{
+    position:absolute;
+    bottom:-10px;
+    left:-8px;
+    min-width:18px;
+    height:18px;
+    padding:0 4px;
+    border-radius:9px;
+    background:#2563eb;
+    color:#fff;
+    font-size:11px;
+    font-weight:800;
+    line-height:18px;
+    text-align:center;
+    box-shadow:0 1px 3px rgba(0,0,0,.25);
+    pointer-events:none;
+    z-index:2;
+  }
   .removeSeatIcon{
     position:absolute;
     top:-10px;
@@ -684,6 +702,10 @@
   </div>
 
   <div class="group" data-mode="always">
+    <button class="secondary toggle" id="tableNumbersBtn" onclick="toggleTableNumbers()">🔢 Table Numbers</button>
+  </div>
+
+  <div class="group" data-mode="always">
     <button class="secondary" onclick="openExportModal()">📄 Export PDF</button>
   </div>
 
@@ -812,6 +834,7 @@
 
     <h3>Exporting</h3>
     <p>📄 Export PDF opens a small picker so you can choose Landscape, Portrait, or Auto (Best Fit) — Auto captures the current layout and automatically picks whichever page orientation prints it biggest for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version. Export PDF works from any of the three view modes.</p>
+    <p><b>🔢 Table Numbers</b> (toolbar, always visible) puts a small numbered badge on every seat, numbered top-to-bottom then left-to-right across the whole layout. This is the same numbering used on <b>🏷️ Desk Labels</b>, so "Table 5" in the app and "Table 5" on a printed label always mean the same physical seat — handy for matching a sticker to a desk. Desk Labels are formatted for real <b>Avery 58163</b> sheets (2" x 4" labels, 10 per sheet) and include the class name(s) for that seat plus the table number.</p>
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
@@ -829,7 +852,7 @@
     <div class="btnRow" style="justify-content:space-between;flex-wrap:wrap;gap:8px;">
       <button class="secondary" onclick="closeSeatRosterModal()">Cancel</button>
       <div style="display:flex;gap:8px;">
-        <button class="secondary" onclick="generateDeskLabels()">🏷️ Desk Labels</button>
+        <button class="secondary" onclick="generateDeskLabels()">🏷️ Desk Labels (Avery 58163)</button>
         <button onclick="generateSeatRosterReport()">📋 Table Report</button>
       </div>
     </div>
@@ -1011,6 +1034,7 @@ let templates = {};
 let viewMode = 'clean';
 let selectMode = false;
 let selectedDeskIds = new Set();
+let showTableNumbers = false;
 let teacherName = '';
 let allClasses = {}; // {classId: {name, createdAt}} — kept in sync by loadClassList, used by the Seat Roster Report picker
 
@@ -1185,6 +1209,30 @@ function posKey(x, y){
   return Math.round(x) + ',' + Math.round(y);
 }
 
+// Shared seat-numbering: assigns each physical seat a stable number by
+// sorting desks top-to-bottom (rows within ~20px of each other count as
+// the same row) then left-to-right, then numbering seats within each desk
+// by slot index. Used identically by the Table Numbers view (render()),
+// the Desk Labels PDF, and the Seat Roster Report, so "Table 5" always
+// means the same physical seat everywhere it appears.
+function computeSeatNumbering(layoutObj){
+  const numbering = {}; // deskId -> { slot: seatNum }
+  const deskEntries = Object.entries(layoutObj).sort((a,b)=>{
+    if(Math.abs(a[1].y - b[1].y) > 20) return a[1].y - b[1].y;
+    return a[1].x - b[1].x;
+  });
+  let seatNum = 0;
+  deskEntries.forEach(([deskId, pos])=>{
+    const cap = pos.capacity || 1;
+    numbering[deskId] = {};
+    for(let slot=0; slot<cap; slot++){
+      seatNum++;
+      numbering[deskId][slot] = seatNum;
+    }
+  });
+  return numbering;
+}
+
 /* Shared data-gathering: fetches layout/seating/roster for each selected class,
    matches seats across classes by physical position (not desk ID), and returns
    one ordered row per physical seat with each class's student name in it.
@@ -1223,17 +1271,17 @@ function getSeatRosterData(classIds){
       return { classNames: classIds.map(id=>allClasses[id].name), seatRows: [] };
     }
 
+    const numbering = computeSeatNumbering(baseLayout);
     const deskEntries = Object.entries(baseLayout).sort((a,b)=>{
       if(Math.abs(a[1].y - b[1].y) > 20) return a[1].y - b[1].y;
       return a[1].x - b[1].x;
     });
 
     const seatRows = [];
-    let seatNum = 0;
     deskEntries.forEach(([deskId, pos])=>{
       const cap = pos.capacity || 1;
       for(let slot=0; slot<cap; slot++){
-        seatNum++;
+        const seatNum = numbering[deskId][slot];
         const key = `${posKey(pos.x,pos.y)},${slot}`;
         const namesByClass = perClassSeatMap.map(map => map[key] || '');
         seatRows.push({ seatNum, namesByClass });
@@ -1309,10 +1357,15 @@ function generateSeatRosterReport(){
   });
 }
 
-/* Cut-apart desk labels: one small card per physical seat, four lines
-   (one per selected class), no seat number — meant to be printed, cut
-   apart, and taped to each desk so any teacher/sub sees who sits there
-   across every period that uses this room. */
+/* Desk labels formatted for Avery 58163 (2" x 4" labels, 10 per standard
+   US Letter sheet, arranged 2 columns x 5 rows — shares the same physical
+   layout as the more commonly-known 5163/8163 shipping label family).
+   Standard spec for this layout: 0.5" top/bottom margin, 0.15625" left/
+   right margin, 4.1875" horizontal pitch (labels + 0.1875" gap), 2.0"
+   vertical pitch (rows touch, no vertical gap). Each label shows a
+   "Table N" number at the top — matching the number shown in the app's
+   Table Numbers view (via the shared computeSeatNumbering function) —
+   followed by one line per selected class showing who sits there. */
 function generateDeskLabels(){
   const classIds = getSelectedSeatRosterClassIds();
   if(!classIds) return;
@@ -1327,55 +1380,66 @@ function generateDeskLabels(){
     }
 
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' });
-    const pageW = pdf.internal.pageSize.getWidth();
-    const pageH = pdf.internal.pageSize.getHeight();
 
-    const margin = 30;
-    const cols = 2, rows = 4;
-    const gutter = 14;
-    const cardW = (pageW - margin*2 - gutter*(cols-1)) / cols;
-    const cardH = (pageH - margin*2 - gutter*(rows-1)) / rows;
+    const labelW = 4, labelH = 2;
+    const leftMargin = 0.15625, topMargin = 0.5;
+    const colPitch = 4.1875, rowPitch = 2.0;
+    const cols = 2, rows = 5;
     const perPage = cols * rows;
+
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'in', format: 'letter' });
 
     const now = new Date();
     const stamp = now.toISOString().slice(0,16).replace('T','_').replace(':','-');
 
     seatRows.forEach((seat, i)=>{
       const posOnPage = i % perPage;
-      if(i > 0 && posOnPage === 0) pdf.addPage();
+      if(i > 0 && posOnPage === 0) pdf.addPage('letter', 'portrait');
 
       const col = posOnPage % cols;
       const row = Math.floor(posOnPage / cols);
-      const x = margin + col * (cardW + gutter);
-      const y = margin + row * (cardH + gutter);
+      const x = leftMargin + col * colPitch;
+      const y = topMargin + row * rowPitch;
+      const padX = 0.2;
 
-      // Dashed cut-line border
-      pdf.setDrawColor(180, 180, 180);
-      pdf.setLineWidth(0.75);
-      if(pdf.setLineDashPattern) pdf.setLineDashPattern([4, 3], 0);
-      pdf.rect(x, y, cardW, cardH);
-      if(pdf.setLineDashPattern) pdf.setLineDashPattern([], 0);
+      // Faint guide border — helpful for confirming print alignment even
+      // though the labels themselves are pre-cut and just peel off.
+      pdf.setDrawColor(220, 220, 220);
+      pdf.setLineWidth(0.008);
+      pdf.rect(x + 0.02, y + 0.02, labelW - 0.04, labelH - 0.04);
 
-      // Four lines: "Class Name: Student Name"
-      const lineH = cardH / (classNames.length + 0.5);
+      // "Table N" header — the number matching the room view's Table
+      // Numbers toggle, so a sub or co-teacher can find the right desk.
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(15);
+      pdf.setTextColor(206, 31, 7);
+      pdf.text(`Table ${seat.seatNum}`, x + padX, y + 0.32);
+
+      pdf.setDrawColor(230, 230, 230);
+      pdf.setLineWidth(0.01);
+      pdf.line(x + padX, y + 0.42, x + labelW - padX, y + 0.42);
+
+      // One line per selected class: "Class Name:" left, student name right
+      const contentTop = y + 0.42;
+      const contentBottom = y + labelH - 0.12;
+      const lineH = (contentBottom - contentTop) / classNames.length;
       classNames.forEach((className, idx)=>{
         const name = seat.namesByClass[idx] || '(unassigned)';
-        const lineY = y + lineH * (idx + 1);
+        const lineY = contentTop + lineH * (idx + 0.7);
 
         pdf.setFont('helvetica', 'bold');
-        pdf.setFontSize(11);
-        pdf.setTextColor(206, 31, 7);
-        pdf.text(className + ':', x + 14, lineY, { align: 'left' });
+        pdf.setFontSize(10);
+        pdf.setTextColor(100, 100, 100);
+        pdf.text(className + ':', x + padX, lineY, { align: 'left' });
 
         pdf.setFont('helvetica', 'normal');
-        pdf.setFontSize(14);
+        pdf.setFontSize(13);
         pdf.setTextColor(30, 30, 30);
-        pdf.text(name, x + cardW - 14, lineY, { align: 'right' });
+        pdf.text(name, x + labelW - padX, lineY, { align: 'right' });
       });
     });
 
-    pdf.save('Desk_Labels_' + stamp + '.pdf');
+    pdf.save('Desk_Labels_Avery58163_' + stamp + '.pdf');
     closeSeatRosterModal();
     setStatus('Labels saved');
   }).catch(err=>{
@@ -1644,6 +1708,13 @@ function setViewMode(mode){
   render();
 }
 
+function toggleTableNumbers(){
+  showTableNumbers = !showTableNumbers;
+  const btn = document.getElementById('tableNumbersBtn');
+  btn.classList.toggle('active', showTableNumbers);
+  render();
+}
+
 function toggleSelectMode(){
   selectMode = !selectMode;
   const btn = document.getElementById('selectModeBtn');
@@ -1859,6 +1930,11 @@ function render(){
     Object.values(seats||{}).forEach(sid=>{ if(sid) seatedIds.add(sid); });
   });
 
+  // Only computed when the toggle is on. Uses the SAME numbering function
+  // as the Desk Labels PDF and Seat Roster Report, so the number shown on
+  // a seat here always matches the number printed on its physical label.
+  const seatNumbering = showTableNumbers ? computeSeatNumbering(layout) : null;
+
   Object.entries(layout).forEach(([deskId, pos])=>{
     const capacity = pos.capacity || 1;
     const deskHasStudent = Object.values(seating[deskId] || {}).some(sid => !!sid);
@@ -1912,6 +1988,13 @@ function render(){
         label.onclick = (e)=>{ e.stopPropagation(); renameStudent(studentId); };
       }
       seat.appendChild(label);
+
+      if(seatNumbering && seatNumbering[deskId] && seatNumbering[deskId][i] !== undefined){
+        const numBadge = document.createElement('span');
+        numBadge.className = 'seatNumberBadge';
+        numBadge.textContent = seatNumbering[deskId][i];
+        seat.appendChild(numBadge);
+      }
 
       if(editingStudents){
         const lockIcon = document.createElement('span');
@@ -2313,6 +2396,7 @@ window.deleteTemplate = deleteTemplate;
 window.generateGrid = generateGrid;
 window.addDesk = addDesk;
 window.clearLayout = clearLayout;
+window.toggleTableNumbers = toggleTableNumbers;
 window.toggleSelectMode = toggleSelectMode;
 window.duplicateSelected = duplicateSelected;
 window.clearSelection = clearSelection;
