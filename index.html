@@ -702,7 +702,7 @@
   </div>
 
   <div class="group" data-mode="always">
-    <button class="secondary toggle" id="tableNumbersBtn" onclick="toggleTableNumbers()">🔢 Table Numbers</button>
+    <button class="secondary toggle" id="seatNumbersBtn" onclick="toggleSeatNumbers()">🔢 Seat Numbers</button>
   </div>
 
   <div class="group" data-mode="always">
@@ -834,7 +834,7 @@
 
     <h3>Exporting</h3>
     <p>📄 Export PDF opens a small picker so you can choose Landscape, Portrait, or Auto (Best Fit) — Auto captures the current layout and automatically picks whichever page orientation prints it biggest for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version. Export PDF works from any of the three view modes.</p>
-    <p><b>🔢 Table Numbers</b> (toolbar, always visible) puts a small numbered badge on every seat, numbered top-to-bottom then left-to-right across the whole layout. This is the same numbering used on <b>🏷️ Desk Labels</b>, so "Table 5" in the app and "Table 5" on a printed label always mean the same physical seat — handy for matching a sticker to a desk. Desk Labels are formatted for real <b>Avery 58163</b> sheets (2" x 4" labels, 10 per sheet) and include the class name(s) for that seat plus the table number.</p>
+    <p><b>🔢 Seat Numbers</b> (toolbar, always visible) puts a small numbered badge on every seat, numbered top-to-bottom then left-to-right across the whole layout. This is the same numbering used on <b>🏷️ Desk Labels</b>, so "Seat 5" in the app and "Seat 5" on a printed label always mean the same physical seat — handy for matching a sticker to a desk. Desk Labels are formatted for real <b>Avery 58163</b> sheets (2" x 4" labels, 10 per sheet) and include the class name(s) for that seat plus the seat number.</p>
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
@@ -843,7 +843,7 @@
 </div>
 
 <div class="modalBg" id="seatRosterModal">
-  <div class="modal" style="width:360px;">
+  <div class="modal" style="width:460px;">
     <h3>Seat Roster Report</h3>
     <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px 0;line-height:1.4;">
       Pick the classes that share this same desk layout (e.g. Core 1–4). Each physical seat becomes one row, with a column per class showing who sits there.
@@ -1034,7 +1034,7 @@ let templates = {};
 let viewMode = 'clean';
 let selectMode = false;
 let selectedDeskIds = new Set();
-let showTableNumbers = false;
+let showSeatNumbers = false;
 let teacherName = '';
 let allClasses = {}; // {classId: {name, createdAt}} — kept in sync by loadClassList, used by the Seat Roster Report picker
 
@@ -1212,7 +1212,7 @@ function posKey(x, y){
 // Shared seat-numbering: assigns each physical seat a stable number by
 // sorting desks top-to-bottom (rows within ~20px of each other count as
 // the same row) then left-to-right, then numbering seats within each desk
-// by slot index. Used identically by the Table Numbers view (render()),
+// by slot index. Used identically by the Seat Numbers view (render()),
 // the Desk Labels PDF, and the Seat Roster Report, so "Table 5" always
 // means the same physical seat everywhere it appears.
 function computeSeatNumbering(layoutObj){
@@ -1364,7 +1364,7 @@ function generateSeatRosterReport(){
    right margin, 4.1875" horizontal pitch (labels + 0.1875" gap), 2.0"
    vertical pitch (rows touch, no vertical gap). Each label shows a
    "Table N" number at the top — matching the number shown in the app's
-   Table Numbers view (via the shared computeSeatNumbering function) —
+   Seat Numbers view (via the shared computeSeatNumbering function) —
    followed by one line per selected class showing who sits there. */
 function generateDeskLabels(){
   const classIds = getSelectedSeatRosterClassIds();
@@ -1413,7 +1413,7 @@ function generateDeskLabels(){
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(15);
       pdf.setTextColor(206, 31, 7);
-      pdf.text(`Table ${seat.seatNum}`, x + padX, y + 0.32);
+      pdf.text(`Seat ${seat.seatNum}`, x + padX, y + 0.32);
 
       pdf.setDrawColor(230, 230, 230);
       pdf.setLineWidth(0.01);
@@ -1708,10 +1708,10 @@ function setViewMode(mode){
   render();
 }
 
-function toggleTableNumbers(){
-  showTableNumbers = !showTableNumbers;
-  const btn = document.getElementById('tableNumbersBtn');
-  btn.classList.toggle('active', showTableNumbers);
+function toggleSeatNumbers(){
+  showSeatNumbers = !showSeatNumbers;
+  const btn = document.getElementById('seatNumbersBtn');
+  btn.classList.toggle('active', showSeatNumbers);
   render();
 }
 
@@ -1933,7 +1933,7 @@ function render(){
   // Only computed when the toggle is on. Uses the SAME numbering function
   // as the Desk Labels PDF and Seat Roster Report, so the number shown on
   // a seat here always matches the number printed on its physical label.
-  const seatNumbering = showTableNumbers ? computeSeatNumbering(layout) : null;
+  const seatNumbering = showSeatNumbers ? computeSeatNumbering(layout) : null;
 
   Object.entries(layout).forEach(([deskId, pos])=>{
     const capacity = pos.capacity || 1;
@@ -2396,7 +2396,7 @@ window.deleteTemplate = deleteTemplate;
 window.generateGrid = generateGrid;
 window.addDesk = addDesk;
 window.clearLayout = clearLayout;
-window.toggleTableNumbers = toggleTableNumbers;
+window.toggleSeatNumbers = toggleSeatNumbers;
 window.toggleSelectMode = toggleSelectMode;
 window.duplicateSelected = duplicateSelected;
 window.clearSelection = clearSelection;
