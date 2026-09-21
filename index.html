@@ -353,6 +353,22 @@
     color:#856404 !important;
     cursor:default;
   }
+  .seat.conflictWarn{
+    border-color:var(--red) !important;
+    box-shadow:0 0 0 2px rgba(206,31,7,0.35);
+  }
+  .conflictIcon{
+    position:absolute;
+    top:-10px;
+    right:-8px;
+    font-size:14px;
+    background:#fff;
+    border-radius:50%;
+    line-height:1;
+    padding:2px;
+    box-shadow:0 1px 3px rgba(0,0,0,.25);
+    z-index:3;
+  }
   .desk.single{
     padding:0;
     border:none;
@@ -448,6 +464,11 @@
     background:#fff !important;
     color:var(--text) !important;
   }
+  #room.printing .seat.conflictWarn{
+    border-color:var(--dark-gray-border) !important;
+    box-shadow:none !important;
+  }
+  #room.printing .conflictIcon{display:none;}
   #room.printing .deskIcons{display:none;}
   #room.printing .seat{cursor:default;}
   #room.printing .seat{
@@ -584,6 +605,55 @@
     margin:8px 0;
     font-size:13px;
   }
+  .keepAwayModal{
+    width:460px;
+    max-width:92vw;
+    max-height:82vh;
+    overflow-y:auto;
+  }
+  .kaGroupCard{
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px 12px;
+    margin-bottom:10px;
+    background:#fafafa;
+  }
+  .kaGroupCard .kaGroupNames{
+    font-size:13px;
+    font-weight:700;
+    color:var(--text);
+    margin-bottom:4px;
+  }
+  .kaGroupCard .kaGroupDel{
+    font-size:11px;
+    color:var(--red);
+    cursor:pointer;
+    font-weight:700;
+    text-decoration:underline;
+  }
+  #kaStudentPicker{
+    display:flex;
+    flex-direction:column;
+    gap:4px;
+    max-height:220px;
+    overflow-y:auto;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:8px;
+    margin-bottom:10px;
+  }
+  #kaStudentPicker label{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    font-weight:600;
+    text-transform:none;
+    letter-spacing:0;
+    color:var(--text);
+    cursor:pointer;
+  }
+  #kaStudentPicker input{width:auto;margin:0;}
 </style>
 </head>
 <body>
@@ -655,6 +725,12 @@
     <span style="font-size:11px;color:var(--muted);">Format: Last, First, Gender(M/F) — one student per line. A header row is fine, it's skipped automatically. Uploading adds to the current roster — click Clear Roster first to fully replace it.</span>
     <button class="secondary" onclick="window.open('https://ericloveday.github.io/seating-chart-maker/kagan-team-importer.html','_blank')" style="margin-top:4px;">Kagan Group Importer</button>
     <span style="font-size:11px;color:var(--muted);">Opens a separate tool (same sign-in) that ranks students by score and auto-seats balanced Kagan groups into this class's existing table layout.</span>
+  </div>
+
+  <div class="group" data-mode="students">
+    <label>Keep Apart</label>
+    <button class="secondary" onclick="openKeepAwayModal()">🚫 Manage Keep-Apart Groups</button>
+    <span style="font-size:11px;color:var(--muted);">Set students who should never share a table or sit right next to each other. Enforced automatically by Place Students, and flagged with a red seat if a manual drag creates one anyway.</span>
   </div>
 
   <div class="group" data-mode="layout">
@@ -790,12 +866,15 @@
       <li><b>🧩 Kagan Team Importer</b> (below Upload CSV): opens a separate companion tool in a new tab, signed in with the same account. Give it a CSV of names + test scores and it ranks students, snake-drafts them into balanced 4-person Kagan teams, and seats them directly into this class's existing pod layout — including an H/HM/LM/L role check and a visual map for confirming which desks form each pod before anything is written.</li>
     </ul>
 
+    <h3>Keep Apart groups</h3>
+    <p>Use <b>🚫 Manage Keep-Apart Groups</b> (in Edit Students mode) to mark students who should never end up at the same table or right next to each other — the same idea as the bathroom checkout's conflict groups, applied to seating. Check 2 or more students and click Create Group; you can make as many separate groups as you need. <b>📌 Place Students</b> automatically avoids seating anyone next to a fellow group member whenever it's possible to do so. A manual drag-and-drop can still create one on purpose (for a supervised exception, say) — if it does, that seat gets a thin red outline and a ⚠️ icon so it's easy to spot before class. Groups are per-class, since rosters are per-class.</p>
+
     <h3>Three Views</h3>
     <p>The room has three modes, switched at the top of the toolbar:</p>
     <ul>
       <li><b>👁 Clean View</b> (the default) — a tidy, read-only look at the chart. No icons, no dragging — great for just glancing at the layout or before printing.</li>
       <li><b>📐 Edit Layout</b> — shows only the table-editing tools (Quick Grid, + Add Desk, Saved Layouts, Select Tables/Duplicate). Every table is freely draggable in this mode, and each table shows a rotate (↻) and remove (×) icon.</li>
-      <li><b>🧑‍🤝‍🧑 Edit Students</b> — shows only the student tools (Roster, Place Students/Order, Clear Seats). Tables are fixed in place, but each filled seat shows lock/unlock and undo icons, and you can drag students from Unassigned onto open seats.</li>
+      <li><b>🧑‍🤝‍🧑 Edit Students</b> — shows only the student tools (Roster, Keep Apart, Place Students/Order, Clear Seats). Tables are fixed in place, but each filled seat shows lock/unlock and undo icons, and you can drag students from Unassigned onto open seats.</li>
     </ul>
 
     <h3>Building desks (Edit Layout mode)</h3>
@@ -815,7 +894,7 @@
     <h3>Seating students (Edit Students mode)</h3>
     <ul>
       <li>Drag a student chip from Unassigned onto any open seat.</li>
-      <li><b>📌 Place Students:</b> fills every unlocked seat with unlocked students, using whatever's chosen in the <b>Order</b> dropdown, starting from the front row (bottom of the layout) and working back.</li>
+      <li><b>📌 Place Students:</b> fills every unlocked seat with unlocked students, using whatever's chosen in the <b>Order</b> dropdown, starting from the front row (bottom of the layout) and working back, and steering around Keep Apart conflicts wherever it can.</li>
       <li><b>Order</b> dropdown controls how students get placed: Random (default), or Alphabetical by first/last name — great for a simple, predictable seating chart instead of a shuffle.</li>
       <li><b>Alternate gender</b> checkbox: interleaves boy/girl in seat order instead of pure random. Only applies when Order is set to Random.</li>
       <li><b>Clear Seats:</b> sends everyone back to Unassigned (does not touch desks).</li>
@@ -826,6 +905,7 @@
       <li><b>🔒 / 🔓</b> (bottom-right of any seat, filled or empty): click to lock/unlock that seat. Locked seats — whether occupied or empty — are skipped by Place Students/Reshuffle and protected from drag-and-drop, so you can reserve an empty seat too, not just protect a seated student.</li>
       <li>The <b>undo arrow</b> (top-left of a filled, unlocked seat): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
       <li><b>🔓 Clear All Locks</b> (in Edit Students mode): unlocks every seat in the current class at once, without touching who's seated. Handy if locks ever get "stuck" on empty seats — for example, if <b>Clear Roster</b> is used to wipe students during a roster change, any seats that were locked will be released automatically as of the current version, but this button is here as a quick fix/reset if you ever end up with locked-but-empty seats.</li>
+      <li><b>⚠️</b> (top-right of a seat, in Edit Students mode): appears when that seat's occupant is sitting near another student from the same Keep Apart group. Purely informational — it won't block or move anyone, it's just a flag so you notice before class starts.</li>
     </ul>
 
     <div class="tip">
@@ -855,6 +935,22 @@
         <button class="secondary" onclick="generateDeskLabels()">🏷️ Desk Labels (Avery 58163)</button>
         <button onclick="generateSeatRosterReport()">📋 Table Report</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="keepAwayModal">
+  <div class="modal keepAwayModal">
+    <h3>Keep-Apart Groups</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px 0;line-height:1.4;">
+      Anyone checked together below will never be placed at the same table or in a touching seat by <b>📌 Place Students</b>. You can still drag them together yourself — that seat will just show a ⚠️ warning as a reminder.
+    </p>
+    <div id="kaExistingGroups"></div>
+    <label style="display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px;">New group — check 2 or more students</label>
+    <div id="kaStudentPicker"></div>
+    <div class="btnRow" style="justify-content:space-between;">
+      <button class="secondary" onclick="closeKeepAwayModal()">Close</button>
+      <button onclick="createKeepAwayGroup()">+ Create Group</button>
     </div>
   </div>
 </div>
@@ -1031,6 +1127,7 @@ let layout = {};
 let seating = {};
 let locks = {};
 let templates = {};
+let keepAwayGroups = {};
 let viewMode = 'clean';
 let selectMode = false;
 let selectedDeskIds = new Set();
@@ -1162,6 +1259,10 @@ function attachClassListeners(){
     locks = snap.val() || {};
     render();
   });
+  db.ref(`${ROOT}/keepAway/${currentClassId}`).on('value', snap=>{
+    keepAwayGroups = snap.val() || {};
+    render();
+  });
 }
 
 /* ====== NEW CLASS MODAL ====== */
@@ -1171,6 +1272,136 @@ function closeNewClassModal(){ document.getElementById('newClassModal').classLis
 /* ====== HELP MODAL ====== */
 function openHelpModal(){ document.getElementById('helpModal').classList.add('show'); }
 function closeHelpModal(){ document.getElementById('helpModal').classList.remove('show'); }
+
+/* ====== KEEP-APART GROUPS ======
+   Per-class groups of student IDs (2+) who should never end up at the same
+   desk or in a touching/adjacent desk. Stored as {groupId: {studentIds:[...]}}
+   under ${ROOT}/keepAway/${classId}. Enforced by randomizeAll() on a best-
+   effort basis (skips a candidate who'd conflict with an already-seated
+   near neighbor; falls back to placing them anyway if no conflict-free
+   candidate remains) and flagged visually by render() using the same
+   desk-adjacency check for anything placed manually. */
+function openKeepAwayModal(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  renderKeepAwayModal();
+  document.getElementById('keepAwayModal').classList.add('show');
+}
+function closeKeepAwayModal(){
+  document.getElementById('keepAwayModal').classList.remove('show');
+}
+
+function renderKeepAwayModal(){
+  const existingEl = document.getElementById('kaExistingGroups');
+  existingEl.innerHTML = '';
+  const groupEntries = Object.entries(keepAwayGroups);
+  if(groupEntries.length === 0){
+    existingEl.innerHTML = '<p style="font-size:12px;color:var(--muted);">No keep-apart groups yet for this class.</p>';
+  }
+  groupEntries.forEach(([groupId, g])=>{
+    const ids = (g && g.studentIds) || [];
+    const names = ids.map(id => (roster[id] ? roster[id].name : '(removed student)'));
+    const card = document.createElement('div');
+    card.className = 'kaGroupCard';
+    const namesDiv = document.createElement('div');
+    namesDiv.className = 'kaGroupNames';
+    namesDiv.textContent = names.join('  •  ');
+    const del = document.createElement('span');
+    del.className = 'kaGroupDel';
+    del.textContent = 'Delete group';
+    del.onclick = ()=>{
+      if(!confirm('Delete this keep-apart group?')) return;
+      db.ref(`${ROOT}/keepAway/${currentClassId}/${groupId}`).remove();
+    };
+    card.appendChild(namesDiv);
+    card.appendChild(del);
+    existingEl.appendChild(card);
+  });
+
+  const picker = document.getElementById('kaStudentPicker');
+  picker.innerHTML = '';
+  const sortedRoster = Object.entries(roster).sort((a,b)=> a[1].name.localeCompare(b[1].name, undefined, {sensitivity:'base'}));
+  if(sortedRoster.length === 0){
+    picker.innerHTML = '<p style="font-size:12px;color:var(--muted);">This class has no students yet.</p>';
+  }
+  sortedRoster.forEach(([id, stu])=>{
+    const label = document.createElement('label');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = id;
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(stu.name));
+    picker.appendChild(label);
+  });
+}
+
+function createKeepAwayGroup(){
+  if(!currentClassId) return;
+  const checked = Array.from(document.querySelectorAll('#kaStudentPicker input[type=checkbox]:checked')).map(cb=>cb.value);
+  if(checked.length < 2){ alert('Check at least 2 students to form a keep-apart group.'); return; }
+  const id = slugId('ka');
+  db.ref(`${ROOT}/keepAway/${currentClassId}/${id}`).set({studentIds: checked});
+  renderKeepAwayModal();
+  setStatus('Keep-apart group created');
+}
+
+// Every OTHER student who shares any keep-apart group with studentId.
+function getConflictSet(studentId){
+  const conflicts = new Set();
+  Object.values(keepAwayGroups).forEach(g=>{
+    const ids = (g && g.studentIds) || [];
+    if(ids.includes(studentId)){
+      ids.forEach(otherId=>{ if(otherId !== studentId) conflicts.add(otherId); });
+    }
+  });
+  return conflicts;
+}
+
+// Desk geometry approximated from the same formulas generateGrid() uses
+// (capacity*84 + (capacity-1)*4 + 8 wide, 62 tall), swapped for 90/270
+// rotation. Two desks count as "near" if their bounding boxes, expanded by
+// a small buffer, overlap — this always catches same-desk (lab-table)
+// seating and desks pushed edge-to-edge into a pod, without also flagging
+// separate rows/columns of a Quick Grid layout as near each other.
+const KA_NEAR_BUFFER = 20;
+function deskRect(pos){
+  const capacity = pos.capacity || 1;
+  let w = capacity * 84 + (capacity - 1) * 4 + 8;
+  let h = 62;
+  const rotation = ((pos.rotation || 0) % 360 + 360) % 360;
+  if(rotation === 90 || rotation === 270){ const t = w; w = h; h = t; }
+  return { left: pos.x, top: pos.y, right: pos.x + w, bottom: pos.y + h };
+}
+function rectsNear(a, b, buffer){
+  return !(a.right + buffer < b.left || b.right + buffer < a.left ||
+           a.bottom + buffer < b.top || b.bottom + buffer < a.top);
+}
+function computeNearDeskGroups(layoutObj){
+  const ids = Object.keys(layoutObj);
+  const near = {};
+  ids.forEach(id => { near[id] = new Set([id]); }); // a desk is always "near" itself
+  for(let i=0;i<ids.length;i++){
+    for(let j=i+1;j<ids.length;j++){
+      if(rectsNear(deskRect(layoutObj[ids[i]]), deskRect(layoutObj[ids[j]]), KA_NEAR_BUFFER)){
+        near[ids[i]].add(ids[j]);
+        near[ids[j]].add(ids[i]);
+      }
+    }
+  }
+  return near; // deskId -> Set of deskIds (including itself) considered "near"
+}
+
+// All student IDs currently seated in a desk considered "near" deskId (per nearDesks),
+// excluding the given slot itself.
+function studentsNearSlot(nearDesks, deskId, slot){
+  const result = [];
+  (nearDesks[deskId] || new Set([deskId])).forEach(nearDeskId=>{
+    const seats = seating[nearDeskId] || {};
+    Object.entries(seats).forEach(([slotIdx, sid])=>{
+      if(sid && !(nearDeskId === deskId && slotIdx == slot)) result.push(sid);
+    });
+  });
+  return result;
+}
 
 /* ====== SEAT ROSTER REPORT ======
    Builds one printable table across several classes (e.g. Core 1-4) that
@@ -1482,6 +1713,7 @@ function deleteClass(){
   db.ref(`${ROOT}/layouts/${idToDelete}`).remove();
   db.ref(`${ROOT}/seating/${idToDelete}`).remove();
   db.ref(`${ROOT}/locks/${idToDelete}`).remove();
+  db.ref(`${ROOT}/keepAway/${idToDelete}`).remove();
   currentClassId = null;
   document.getElementById('roomTitle').textContent = "No class selected";
   document.getElementById('room').innerHTML = "";
@@ -1829,6 +2061,16 @@ function randomizeAll(){
     ordered = [...pool].sort(()=>Math.random()-0.5);
   }
 
+  // Keep-Apart-aware placement: walk the open seats in placement order and,
+  // for each one, pull the EARLIEST remaining student in `ordered` who
+  // doesn't conflict with anyone already seated in a "near" desk (same
+  // desk or a desk pushed right up against it). This preserves the chosen
+  // order (random/alpha/alternate) as closely as possible while routing
+  // around conflicts. If every remaining student would conflict with that
+  // one seat, we place the earliest one anyway (unavoidable, e.g. a tiny
+  // 2-seat pod holding two members of the same group) and note it at the end.
+  const nearDesks = computeNearDeskGroups(layout);
+  const remaining = [...ordered];
   const newSeating = {};
   Object.entries(seating).forEach(([deskId, seats])=>{
     Object.entries(seats||{}).forEach(([slot, sid])=>{
@@ -1838,15 +2080,35 @@ function randomizeAll(){
       }
     });
   });
-  openSlots.forEach((s, i)=>{
-    if(ordered[i]){
-      newSeating[s.deskId] = newSeating[s.deskId] || {};
-      newSeating[s.deskId][s.slot] = ordered[i];
+
+  let unavoidableConflicts = 0;
+  openSlots.forEach(s=>{
+    if(remaining.length === 0) return;
+    const nearby = studentsNearSlot(nearDesks, s.deskId, s.slot).concat(
+      // students already placed earlier in this same run at near desks
+      Object.entries(newSeating).filter(([dId])=> (nearDesks[s.deskId]||new Set()).has(dId))
+        .flatMap(([,seats])=>Object.values(seats))
+    );
+    let pickIdx = remaining.findIndex(sid=>{
+      const conflicts = getConflictSet(sid);
+      return !nearby.some(nid => conflicts.has(nid));
+    });
+    if(pickIdx === -1){
+      pickIdx = 0;
+      if(nearby.some(nid => getConflictSet(remaining[0]).has(nid))) unavoidableConflicts++;
     }
+    const sid = remaining.splice(pickIdx, 1)[0];
+    newSeating[s.deskId] = newSeating[s.deskId] || {};
+    newSeating[s.deskId][s.slot] = sid;
   });
 
   db.ref(`${ROOT}/seating/${currentClassId}`).set(newSeating);
-  setStatus('Reshuffled');
+  if(unavoidableConflicts > 0){
+    setStatus('Reshuffled (some conflicts unavoidable)');
+    alert(`Placed everyone, but the layout was too tight to keep every Keep-Apart group fully separated (${unavoidableConflicts} seat${unavoidableConflicts>1?'s':''} affected). Check the seats with a ⚠️ icon in Edit Students mode.`);
+  } else {
+    setStatus('Reshuffled');
+  }
 }
 
 function toggleLock(deskId, slot){
@@ -1935,6 +2197,11 @@ function render(){
   // a seat here always matches the number printed on its physical label.
   const seatNumbering = showSeatNumbers ? computeSeatNumbering(layout) : null;
 
+  // Keep-Apart conflict flags: only worth computing if there's at least
+  // one group defined for this class.
+  const hasKeepAway = Object.keys(keepAwayGroups).length > 0;
+  const nearDesks = hasKeepAway ? computeNearDeskGroups(layout) : null;
+
   Object.entries(layout).forEach(([deskId, pos])=>{
     const capacity = pos.capacity || 1;
     const deskHasStudent = Object.values(seating[deskId] || {}).some(sid => !!sid);
@@ -1975,9 +2242,20 @@ function render(){
       const isLocked = !!(locks[deskId] && locks[deskId][i]);
       const gender = studentId && roster[studentId] ? roster[studentId].gender : '';
       const genderClass = gender === 'M' ? ' male' : (gender === 'F' ? ' female' : '');
-      
+
+      // Does this seat's occupant share a Keep-Apart group with anyone
+      // seated in a "near" desk (including other seats at this same desk)?
+      let hasConflict = false;
+      if(hasKeepAway && studentId){
+        const conflicts = getConflictSet(studentId);
+        if(conflicts.size > 0){
+          const nearby = studentsNearSlot(nearDesks, deskId, i);
+          hasConflict = nearby.some(nid => conflicts.has(nid));
+        }
+      }
+
       const seat = document.createElement('div');
-      seat.className = 'seat' + (studentId ? ' filled' : ' empty') + genderClass + (isLocked ? ' locked' : '');
+      seat.className = 'seat' + (studentId ? ' filled' : ' empty') + genderClass + (isLocked ? ' locked' : '') + (hasConflict ? ' conflictWarn' : '');
       seat.style.position = 'relative';
 
       const label = document.createElement('span');
@@ -1988,6 +2266,14 @@ function render(){
         label.onclick = (e)=>{ e.stopPropagation(); renameStudent(studentId); };
       }
       seat.appendChild(label);
+
+      if(hasConflict){
+        const warnIcon = document.createElement('span');
+        warnIcon.className = 'conflictIcon';
+        warnIcon.textContent = '⚠️';
+        warnIcon.title = 'Seated near another student from the same Keep-Apart group';
+        seat.appendChild(warnIcon);
+      }
 
       if(seatNumbering && seatNumbering[deskId] && seatNumbering[deskId][i] !== undefined){
         const numBadge = document.createElement('span');
@@ -2412,6 +2698,9 @@ window.openSeatRosterModal = openSeatRosterModal;
 window.closeSeatRosterModal = closeSeatRosterModal;
 window.generateSeatRosterReport = generateSeatRosterReport;
 window.generateDeskLabels = generateDeskLabels;
+window.openKeepAwayModal = openKeepAwayModal;
+window.closeKeepAwayModal = closeKeepAwayModal;
+window.createKeepAwayGroup = createKeepAwayGroup;
 window.addStudentManually = addStudentManually;
 window.dropOnUnassigned = dropOnUnassigned;
 window.removeDesk = removeDesk;
