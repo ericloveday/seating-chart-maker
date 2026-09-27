@@ -443,38 +443,45 @@
     z-index:2;
   }
   #room.printing .seatTools{display:none;}
-  .deskIcons{
+  /* ---------------- Table toolbar (Edit Layout mode) ----------------
+     Same idea as the seat toolbar: a strip across the bottom quarter of the
+     table, spanning every seat at that table. Seats keep their square size;
+     their names just shift up into the top 3/4 while this is showing. */
+  .desk.layoutTools .seat{ padding-bottom:var(--seat-toolbar); }
+  .deskTools{
     position:absolute;
-    top:-13px;
-    right:-13px;
+    left:4px; right:4px; bottom:4px;   /* matches .desk padding */
+    height:var(--seat-toolbar);
     display:flex;
-    gap:3px;
-    z-index:10;
+    background:#eef0f3;
+    border:2px solid var(--desk-border);
+    border-radius:0 0 6px 6px;
+    overflow:hidden;
+    z-index:5;
   }
-  .deskIcons span{
-    width:24px;
-    height:24px;
-    border-radius:50%;
-    background:#333;
-    color:#fff;
-    font-size:14px;
-    line-height:24px;
-    text-align:center;
-    cursor:pointer;
+  .desk.single .deskTools{ left:0; right:0; bottom:0; }
+  .deskTools button{
+    flex:1;
+    min-width:0;
+    padding:0;
+    border:0 solid var(--desk-border);
+    border-radius:0;
+    background:transparent;
+    color:#374151;
+    font-size:12px;
+    font-weight:800;
+    line-height:1;
     display:flex;
     align-items:center;
     justify-content:center;
-    box-shadow:0 1px 3px rgba(0,0,0,.25);
+    gap:2px;
+    cursor:pointer;
   }
-  .deskIcons span:hover{
-    background:#000;
-  }
-  .deskIcons span svg{
-    width:12px;
-    height:12px;
-    fill:#fff;
-  }
-  .deskIcons span.gear{background:#555;}
+  .deskTools button + button{ border-left-width:2px; }
+  .deskTools button:hover{ background:rgba(0,0,0,.09); }
+  .deskTools button:focus-visible{ outline:2px solid #2563eb; outline-offset:-2px; }
+  .deskTools button svg{ width:15px; height:15px; fill:currentColor; flex:none; }
+  .deskTools button.removeDeskBtn:hover{ background:var(--red); color:#fff; }
   #room.printing .seat.locked{
     border-color:var(--dark-gray-border) !important;
     background:#fff !important;
@@ -485,7 +492,8 @@
     box-shadow:none !important;
   }
   #room.printing .conflictIcon{display:none;}
-  #room.printing .deskIcons{display:none;}
+  #room.printing .deskTools{display:none;}
+  #room.printing .desk.layoutTools .seat{padding-bottom:0;}
   #room.printing .seat{cursor:default;}
   #room.printing .seat{
     font-size:15px;
@@ -894,7 +902,7 @@
     <p>The room has three modes, switched at the top of the toolbar:</p>
     <ul>
       <li><b>👁 Clean View</b> (the default) — a tidy, read-only look at the chart. No icons, no dragging — great for just glancing at the layout or before printing.</li>
-      <li><b>📐 Edit Layout</b> — shows only the table-editing tools (Quick Grid, + Add Desk, Saved Layouts, Select Tables/Duplicate). Every table is freely draggable in this mode, and each table shows a rotate (↻) and remove (×) icon.</li>
+      <li><b>📐 Edit Layout</b> — shows only the table-editing tools (Quick Grid, + Add Desk, Saved Layouts, Select Tables/Duplicate). Every table is freely draggable in this mode, and each table shows its toolbar strip along the bottom (rotate, seats, remove).</li>
       <li><b>🧑‍🤝‍🧑 Edit Students</b> — shows only the student tools (Roster, Keep Apart, Place Students/Order, Clear Seats). Tables are fixed in place, each seat shows its toolbar strip along the bottom, and you can drag students from Unassigned onto open seats.</li>
     </ul>
 
@@ -903,8 +911,10 @@
       <li><b>Quick Grid:</b> pick rows × columns and seats-per-desk (1 = individual desks, 2 = lab tables), then Generate. This replaces the current layout and clears seating — but never touches your roster, so switching a class from Rows to Groups (or vice versa) is just Generate with new settings.</li>
       <li><b>Clear Layout</b> removes every table from the class at once (students return to Unassigned, roster stays intact) — handy when you want to build a custom arrangement from scratch with + Add Desk instead of using Quick Grid.</li>
       <li><b>+ Add Desk:</b> adds one single desk, draggable immediately.</li>
-      <li>Click the × on any desk to remove that table (any seated student returns to Unassigned).</li>
-      <li>Click the rotate icon (↻) to turn a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
+      <li><b>Table toolbar:</b> in Edit Layout mode, the bottom quarter of every table is a toolbar with three buttons, left to right: rotate, seats, and remove.</li>
+      <li>The <b>seats</b> button (chair icon with a number) changes how many seats that table has, 1–6. Students in seats that get removed return to Unassigned.</li>
+      <li>The <b>×</b> removes that table (any seated student returns to Unassigned).</li>
+      <li>The <b>rotate</b> button (↻) turns a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
       <li><b>Select Tables: On</b> lets you click tables to select them (blue outline). Drag any selected table and the whole selected group moves together, keeping their arrangement. <b>Duplicate Selected</b> clones the whole selected group — same layout, same rotations — placed just to the right, and auto-selects the copies so you can keep duplicating to build a row of matching groups fast. <b>Clear Selection</b> deselects everything.</li>
       <li>While dragging any table, a thin blue guide line appears whenever an edge or center lines up with another table — and the table snaps right into place, just like Canva or PowerPoint.</li>
       <li><b>↔ Spread Out for Square Seats:</b> seats are now bigger squares, so layouts built before that change can have overlapping tables. Click this once per class (and once after applying an older saved layout) to spread every table out proportionally. Seating and locks stay exactly as they were. Rotated tables may need a small nudge afterward.</li>
@@ -1978,6 +1988,11 @@ function editCapacity(deskId){
       db.ref(`${ROOT}/seating/${currentClassId}/${deskId}/${slot}`).remove();
     }
   });
+  Object.keys(locks[deskId] || {}).forEach(slot=>{
+    if(parseInt(slot) >= n){
+      db.ref(`${ROOT}/locks/${currentClassId}/${deskId}/${slot}`).remove();
+    }
+  });
 }
 
 function setViewMode(mode){
@@ -2247,6 +2262,9 @@ function dropOnUnassigned(event){
 }
 
 /* ====== RENDER ====== */
+const ROTATE_SVG = '<svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08a6.003 6.003 0 01-5.65 4c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L14 11h7V4l-3.35 2.35z"/></svg>';
+const SEAT_SVG = '<svg viewBox="0 0 24 24"><path d="M4 18v3h3v-3h10v3h3v-6H4zm15-8h3v3h-3zM2 10h3v3H2zm15 3H7V5c0-1.1.9-2 2-2h6c1.1 0 2 .9 2 2v8z"/></svg>';
+const REMOVE_SVG = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
 const UNSEAT_SVG = '<svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>';
 
 function render(){
@@ -2273,30 +2291,11 @@ function render(){
     const isSelected = selectedDeskIds.has(deskId);
     const editingLayout = viewMode === 'editLayout';
     const editingStudents = viewMode === 'editStudents';
-    desk.className = 'desk' + (editingLayout ? ' arrangeMode' : '') + (capacity === 1 ? ' single' : '') + (editingLayout ? ' movable' : '') + (selectMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
+    desk.className = 'desk' + (editingLayout ? ' arrangeMode layoutTools' : '') + (capacity === 1 ? ' single' : '') + (editingLayout ? ' movable' : '') + (selectMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
     desk.dataset.deskId = deskId;
     desk.style.left = pos.x + 'px';
     desk.style.top = pos.y + 'px';
 
-    if(editingLayout){
-      const icons = document.createElement('div');
-      icons.className = 'deskIcons';
-      const rotateBtn = document.createElement('span');
-      rotateBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08a6.003 6.003 0 01-5.65 4c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L14 11h7V4l-3.35 2.35z"/></svg>';
-      rotateBtn.title = 'Rotate this table 90°';
-      rotateBtn.onclick = (e)=>{ e.stopPropagation(); rotateDesk(deskId); };
-      const remove = document.createElement('span');
-      remove.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>';
-      remove.title = 'Remove this table';
-      remove.onclick = (e)=>{
-        e.stopPropagation();
-        if(!confirm('Remove this table? Any student seated there will move back to Unassigned.')) return;
-        removeDesk(deskId);
-      };
-      icons.appendChild(rotateBtn);
-      icons.appendChild(remove);
-      desk.appendChild(icons);
-    }
 
     const rotation = pos.rotation || 0;
     desk.style.transform = `rotate(${rotation}deg)`;
@@ -2392,7 +2391,31 @@ function render(){
       desk.appendChild(seat);
     }
 
+    // Bottom 1/4 of the table: layout toolbar (Edit Layout mode only)
     if(editingLayout){
+      const tools = document.createElement('div');
+      tools.className = 'deskTools';
+
+      const makeBtn = (cls, html, title, handler)=>{
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = cls;
+        b.innerHTML = html;
+        b.title = title;
+        b.setAttribute('aria-label', title);
+        b.onclick = (e)=>{ e.stopPropagation(); handler(); };
+        return b;
+      };
+
+      tools.appendChild(makeBtn('rotateDeskBtn', ROTATE_SVG, 'Rotate this table 90°', ()=> rotateDesk(deskId)));
+      tools.appendChild(makeBtn('seatsDeskBtn', SEAT_SVG + '<span>' + capacity + '</span>',
+        `Change number of seats (currently ${capacity})`, ()=> editCapacity(deskId)));
+      tools.appendChild(makeBtn('removeDeskBtn', REMOVE_SVG, 'Remove this table', ()=>{
+        if(!confirm('Remove this table? Any student seated there will move back to Unassigned.')) return;
+        removeDesk(deskId);
+      }));
+
+      desk.appendChild(tools);
       desk.onmousedown = (e)=> startDeskDrag(e, deskId, desk);
     }
 
@@ -2453,7 +2476,7 @@ function getLocalRect(el, roomRect, roomEl){
 }
 
 function startDeskDrag(e, deskId, deskEl){
-  if(e.target.tagName === 'SPAN') return;
+  if(e.target.closest('.deskTools')) return;
 
   const startClientX = e.clientX;
   const startClientY = e.clientY;
