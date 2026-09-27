@@ -17,12 +17,17 @@
     --red:#ce1f07;
     --red-dark:#a31905;
     --dark-gray:#808080;
-    --dark-gray-border:#cccccc; /* Subtle, clean gray for borders */
+    --dark-gray-border:#8f959e; /* Solid, clearly visible seat border */
+    --desk-border:#6b7079;      /* Slightly darker for the table outline */
     --bg:#f4f5f7;
     --card:#ffffff;
     --border:#dfe2e6;
     --text:#222;
     --muted:#6b7280;
+    /* Square seat size. If you change this, also change SEAT_PX in the
+       script (desk geometry for grids, keep-apart, and duplicating). */
+    --seat-size:104px;
+    --seat-toolbar:26px; /* bottom quarter of the seat */
   }
   *{box-sizing:border-box;}
   html, body{
@@ -267,9 +272,8 @@
   }
   .desk{
     position:absolute;
-    min-height:62px;
     background:#fff;
-    border:1.5px solid var(--dark-gray-border);
+    border:2px solid var(--desk-border);
     border-radius:0px; /* Square corners for tables */
     display:flex;
     align-items:stretch;
@@ -295,64 +299,109 @@
     cursor:grabbing;
     z-index:50;
   }
- .seat{
-    width:80px;
-    min-height:50px;
-    background:#fdfdfd;
-    border:1.5px dashed var(--dark-gray-border);
+
+  /* ---------------- Square seats ----------------
+     Top 3/4: the student's name. Bottom 1/4: a toolbar with the editing
+     buttons (only shown in Edit Students mode). The seat stays the same
+     square size in every mode so nothing jumps around when you switch. */
+  .seat{
+    width:var(--seat-size);
+    height:var(--seat-size);
+    flex:none;
+    background:#fff;
+    border:2px solid var(--dark-gray-border);
     border-radius:6px;
     display:flex;
-    align-items:center;
-    justify-content:center;
-    text-align:center;
-    /* Clean, highly legible font settings */
+    flex-direction:column;
+    align-items:stretch;
     font-family: Verdana, Geneva, sans-serif;
     font-size: 14px;
     font-weight: 450;
     line-height: 1.25;
-    padding:4px;
+    color:#111827;
     cursor:grab;
     z-index:1;
   }
-  
+  .seatName{
+    flex:1;
+    min-height:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    text-align:center;
+    padding:4px 6px;
+    overflow:hidden;
+    overflow-wrap:anywhere;
+  }
+  .seatTools{
+    flex:none;
+    height:var(--seat-toolbar);
+    display:flex;
+    border:0 solid;
+    border-color:inherit;       /* matches whatever color the seat border is */
+    border-top-width:2px;
+    background:rgba(0,0,0,.04);
+    border-radius:0 0 4px 4px;
+    overflow:hidden;
+  }
+  .seatTools button{
+    flex:1;
+    min-width:0;
+    padding:0;
+    border:0 solid;
+    border-color:inherit;
+    border-radius:0;
+    background:transparent;
+    color:#374151;
+    font-size:14px;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+  }
+  .seatTools button + button{ border-left-width:2px; }
+  .seatTools button:hover{ background:rgba(0,0,0,.09); }
+  .seatTools button:focus-visible{ outline:2px solid #2563eb; outline-offset:-2px; }
+  .seatTools button svg{ width:15px; height:15px; fill:currentColor; }
+  .seatTools button.unseatBtn:hover{ background:var(--red); color:#fff; }
+
   /* Filled Seat Base Style */
   .seat.filled {
-    border-style: solid;
-    border-color: var(--dark-gray-border);
     background: #ffffff;
-    color: #111827; /* Dark gray text */
+    color: #111827;
   }
 
   /* Boys: Faded Red (Soft Warm Coral) with Dark Text */
   .seat.filled.male {
     background-color: #fcf0f0;
-    border-color: #e5b3b3;
-    color: #111827;
+    border-color: #c98383;
   }
 
   /* Girls: Faded Purple (Soft Lavender) with Dark Text */
   .seat.filled.female {
     background-color: #f6f0fa;
-    border-color: #d1beea;
-    color: #111827;
+    border-color: #a487cf;
   }
   .seat.empty{
+    cursor:default;
+  }
+  .seat.empty .seatName{
     color:var(--muted);
     font-weight:600;
     font-style:italic;
-    cursor:default;
-    border-color:var(--dark-gray-border);
   }
   .seat.dropTarget{
     background:#e5e7eb;
     box-shadow:0 0 0 3px var(--dark-gray-border);
   }
   .seat.locked{
-    border-color:#d4a017 !important;
+    border-color:#c9960c !important;
     background:#fff9e8 !important;
     color:#856404 !important;
     cursor:default;
   }
+  .seat.locked .seatTools{ background:rgba(201,150,12,.14); }
   .seat.conflictWarn{
     border-color:var(--red) !important;
     box-shadow:0 0 0 2px rgba(206,31,7,0.35);
@@ -375,21 +424,10 @@
     background:transparent;
     box-shadow:none;
   }
-  .lockIcon{
-    position:absolute;
-    bottom:-10px;
-    right:-8px;
-    font-size:18px;
-    cursor:pointer;
-    background:#fff;
-    border-radius:50%;
-    line-height:1;
-    padding:2px;
-  }
   .seatNumberBadge{
     position:absolute;
-    bottom:-10px;
-    left:-8px;
+    top:-9px;
+    left:-9px;
     min-width:18px;
     height:18px;
     padding:0 4px;
@@ -404,29 +442,7 @@
     pointer-events:none;
     z-index:2;
   }
-  .removeSeatIcon{
-    position:absolute;
-    top:-10px;
-    left:-8px;
-    width:22px;
-    height:22px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    cursor:pointer;
-    background:var(--red);
-    border-radius:50%;
-    box-shadow:0 1px 3px rgba(0,0,0,.25);
-  }
-  .removeSeatIcon:hover{
-    background:var(--red-dark);
-  }
-  .removeSeatIcon svg{
-    width:13px;
-    height:13px;
-    fill:#fff;
-  }
-  #room.printing .removeSeatIcon{display:none;}
+  #room.printing .seatTools{display:none;}
   .deskIcons{
     position:absolute;
     top:-13px;
@@ -475,11 +491,10 @@
     font-size:15px;
     font-weight:800;
   }
-  #room.printing .seat.empty{
+  #room.printing .seat.empty .seatName{
     font-size:13px;
     font-weight:600;
   }
-  #room.printing .lockIcon{display:none;}
   .desk{position:absolute;}
   .deskInner{position:relative;display:flex;gap:4px;}
   #sidebar{
@@ -757,6 +772,12 @@
   </div>
 
   <div class="group" data-mode="layout">
+    <label>Older Layouts</label>
+    <button class="secondary" onclick="fitLayoutToSquareSeats()">↔ Spread Out for Square Seats</button>
+    <span style="font-size:11px;color:var(--muted);">Tables overlapping? Layouts built before seats became squares are packed too tightly. Click once per class to spread them out — seating stays put.</span>
+  </div>
+
+  <div class="group" data-mode="layout">
     <button class="toggle" id="selectModeBtn" onclick="toggleSelectMode()">Select Tables: Off</button>
     <button class="secondary" onclick="duplicateSelected()">Duplicate Selected</button>
     <button class="secondary" onclick="clearSelection()">Clear Selection</button>
@@ -867,14 +888,14 @@
     </ul>
 
     <h3>Keep Apart groups</h3>
-    <p>Use <b>🚫 Manage Keep-Apart Groups</b> (in Edit Students mode) to mark students who should never end up at the same table or right next to each other — the same idea as the bathroom checkout's conflict groups, applied to seating. Check 2 or more students and click Create Group; you can make as many separate groups as you need. <b>📌 Place Students</b> automatically avoids seating anyone next to a fellow group member whenever it's possible to do so. A manual drag-and-drop can still create one on purpose (for a supervised exception, say) — if it does, that seat gets a thin red outline and a ⚠️ icon so it's easy to spot before class. Groups are per-class, since rosters are per-class.</p>
+    <p>Use <b>🚫 Manage Keep-Apart Groups</b> (in Edit Students mode) to mark students who should never end up at the same table or right next to each other — the same idea as the bathroom checkout's conflict groups, applied to seating. Check 2 or more students and click Create Group; you can make as many separate groups as you need. <b>📌 Place Students</b> automatically avoids seating anyone next to a fellow group member whenever it's possible to do so. A manual drag-and-drop can still create one on purpose (for a supervised exception, say) — if it does, that seat gets a red outline and a ⚠️ icon so it's easy to spot before class. Groups are per-class, since rosters are per-class.</p>
 
     <h3>Three Views</h3>
     <p>The room has three modes, switched at the top of the toolbar:</p>
     <ul>
       <li><b>👁 Clean View</b> (the default) — a tidy, read-only look at the chart. No icons, no dragging — great for just glancing at the layout or before printing.</li>
       <li><b>📐 Edit Layout</b> — shows only the table-editing tools (Quick Grid, + Add Desk, Saved Layouts, Select Tables/Duplicate). Every table is freely draggable in this mode, and each table shows a rotate (↻) and remove (×) icon.</li>
-      <li><b>🧑‍🤝‍🧑 Edit Students</b> — shows only the student tools (Roster, Keep Apart, Place Students/Order, Clear Seats). Tables are fixed in place, but each filled seat shows lock/unlock and undo icons, and you can drag students from Unassigned onto open seats.</li>
+      <li><b>🧑‍🤝‍🧑 Edit Students</b> — shows only the student tools (Roster, Keep Apart, Place Students/Order, Clear Seats). Tables are fixed in place, each seat shows its toolbar strip along the bottom, and you can drag students from Unassigned onto open seats.</li>
     </ul>
 
     <h3>Building desks (Edit Layout mode)</h3>
@@ -886,6 +907,7 @@
       <li>Click the rotate icon (↻) to turn a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
       <li><b>Select Tables: On</b> lets you click tables to select them (blue outline). Drag any selected table and the whole selected group moves together, keeping their arrangement. <b>Duplicate Selected</b> clones the whole selected group — same layout, same rotations — placed just to the right, and auto-selects the copies so you can keep duplicating to build a row of matching groups fast. <b>Clear Selection</b> deselects everything.</li>
       <li>While dragging any table, a thin blue guide line appears whenever an edge or center lines up with another table — and the table snaps right into place, just like Canva or PowerPoint.</li>
+      <li><b>↔ Spread Out for Square Seats:</b> seats are now bigger squares, so layouts built before that change can have overlapping tables. Click this once per class (and once after applying an older saved layout) to spread every table out proportionally. Seating and locks stay exactly as they were. Rotated tables may need a small nudge afterward.</li>
     </ul>
 
     <h3>Saved Layouts (Rows / Groups / etc.)</h3>
@@ -900,13 +922,15 @@
       <li><b>Clear Seats:</b> sends everyone back to Unassigned (does not touch desks).</li>
     </ul>
 
-    <h3>Seat icons (visible in Edit Students mode)</h3>
+    <h3>Seat toolbar (visible in Edit Students mode)</h3>
+    <p>Every seat is a square. The top three quarters show the student's name; the bottom quarter is a small toolbar with that seat's buttons:</p>
     <ul>
-      <li><b>🔒 / 🔓</b> (bottom-right of any seat, filled or empty): click to lock/unlock that seat. Locked seats — whether occupied or empty — are skipped by Place Students/Reshuffle and protected from drag-and-drop, so you can reserve an empty seat too, not just protect a seated student.</li>
-      <li>The <b>undo arrow</b> (top-left of a filled, unlocked seat): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
+      <li><b>🔒 / 🔓</b> (left side of the toolbar, on every seat, filled or empty): click to lock/unlock that seat. Locked seats — whether occupied or empty — turn gold, are skipped by Place Students/Reshuffle, and are protected from drag-and-drop, so you can reserve an empty seat too, not just protect a seated student.</li>
+      <li>The <b>undo arrow</b> (right side of the toolbar, on filled, unlocked seats): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
       <li><b>🔓 Clear All Locks</b> (in Edit Students mode): unlocks every seat in the current class at once, without touching who's seated. Handy if locks ever get "stuck" on empty seats — for example, if <b>Clear Roster</b> is used to wipe students during a roster change, any seats that were locked will be released automatically as of the current version, but this button is here as a quick fix/reset if you ever end up with locked-but-empty seats.</li>
-      <li><b>⚠️</b> (top-right of a seat, in Edit Students mode): appears when that seat's occupant is sitting near another student from the same Keep Apart group. Purely informational — it won't block or move anyone, it's just a flag so you notice before class starts.</li>
+      <li><b>⚠️</b> (top-right corner of a seat): appears when that seat's occupant is sitting near another student from the same Keep Apart group. Purely informational — it won't block or move anyone, it's just a flag so you notice before class starts.</li>
     </ul>
+    <p>The toolbar never prints — exported PDFs show just the names.</p>
 
     <div class="tip">
       <b>IEP / 504 seating:</b> place the student in the seat they need, click 🔒 to lock it, then hit 📌 Place Students as usual — everyone else fills in around them, and they'll stay locked in for future placements too. Locked students are also excluded from the "Alternate gender" calculation, so they won't throw off the balance.
@@ -914,7 +938,7 @@
 
     <h3>Exporting</h3>
     <p>📄 Export PDF opens a small picker so you can choose Landscape, Portrait, or Auto (Best Fit) — Auto captures the current layout and automatically picks whichever page orientation prints it biggest for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version. Export PDF works from any of the three view modes.</p>
-    <p><b>🔢 Seat Numbers</b> (toolbar, always visible) puts a small numbered badge on every seat, numbered top-to-bottom then left-to-right across the whole layout. This is the same numbering used on <b>🏷️ Desk Labels</b>, so "Seat 5" in the app and "Seat 5" on a printed label always mean the same physical seat — handy for matching a sticker to a desk. Desk Labels are formatted for real <b>Avery 58163</b> sheets (2" x 4" labels, 10 per sheet) and include the class name(s) for that seat plus the seat number.</p>
+    <p><b>🔢 Seat Numbers</b> (toolbar, always visible) puts a small numbered badge on the top-left corner of every seat, numbered top-to-bottom then left-to-right across the whole layout. This is the same numbering used on <b>🏷️ Desk Labels</b>, so "Seat 5" in the app and "Seat 5" on a printed label always mean the same physical seat — handy for matching a sticker to a desk. Desk Labels are formatted for real <b>Avery 58163</b> sheets (2" x 4" labels, 10 per sheet) and include the class name(s) for that seat plus the seat number.</p>
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
@@ -1134,6 +1158,23 @@ let selectedDeskIds = new Set();
 let showSeatNumbers = false;
 let teacherName = '';
 let allClasses = {}; // {classId: {name, createdAt}} — kept in sync by loadClassList, used by the Seat Roster Report picker
+
+/* ====== DESK GEOMETRY ======
+   Must match the CSS: --seat-size (square seat, border included since
+   box-sizing is border-box), .desk padding (4px), gap (4px), and border (2px).
+   Used by Quick Grid spacing, Keep-Apart "near" detection, and Duplicate. */
+const SEAT_PX = 104;
+const DESK_PAD = 4, DESK_GAP = 4, DESK_BORDER = 2;
+function deskSize(capacity){
+  capacity = capacity || 1;
+  return {
+    w: capacity * SEAT_PX + (capacity - 1) * DESK_GAP + DESK_PAD * 2 + DESK_BORDER * 2,
+    h: SEAT_PX + DESK_PAD * 2 + DESK_BORDER * 2
+  };
+}
+// Old (pre-square) desk footprint, used only by the one-time spread-out tool:
+// seats were 80px wide x ~62px tall per desk.
+const OLD_SEAT_W = 80, OLD_DESK_H = 62;
 
 function loadTeacherName(){
   try{
@@ -1356,17 +1397,14 @@ function getConflictSet(studentId){
   return conflicts;
 }
 
-// Desk geometry approximated from the same formulas generateGrid() uses
-// (capacity*84 + (capacity-1)*4 + 8 wide, 62 tall), swapped for 90/270
-// rotation. Two desks count as "near" if their bounding boxes, expanded by
-// a small buffer, overlap — this always catches same-desk (lab-table)
-// seating and desks pushed edge-to-edge into a pod, without also flagging
-// separate rows/columns of a Quick Grid layout as near each other.
+// Desk geometry from deskSize() (same numbers generateGrid() uses),
+// swapped for 90/270 rotation. Two desks count as "near" if their bounding
+// boxes, expanded by a small buffer, overlap — this always catches same-desk
+// (lab-table) seating and desks pushed edge-to-edge into a pod, without also
+// flagging separate rows/columns of a Quick Grid layout as near each other.
 const KA_NEAR_BUFFER = 20;
 function deskRect(pos){
-  const capacity = pos.capacity || 1;
-  let w = capacity * 84 + (capacity - 1) * 4 + 8;
-  let h = 62;
+  let { w, h } = deskSize(pos.capacity || 1);
   const rotation = ((pos.rotation || 0) % 360 + 360) % 360;
   if(rotation === 90 || rotation === 270){ const t = w; w = h; h = t; }
   return { left: pos.x, top: pos.y, right: pos.x + w, bottom: pos.y + h };
@@ -1854,11 +1892,9 @@ function generateGrid(){
   const capacity = parseInt(document.getElementById('capacitySelect').value) || 1;
   if(!confirm(`This replaces the current desk layout with a ${rows}x${cols} grid (${capacity} seat${capacity>1?'s':''}/desk). Continue?`)) return;
 
-  const deskWidth = capacity * 84 + (capacity-1)*4 + 8;
-  const deskHeight = 62;
-  const gapX = deskWidth + 40, gapY = 100;
+  const { w: deskWidth, h: deskHeight } = deskSize(capacity);
+  const gapX = deskWidth + 40, gapY = deskHeight + 40;
   const totalWidth = cols * deskWidth + (cols - 1) * 40;
-  const totalHeight = rows * deskHeight + (rows - 1) * (gapY - deskHeight);
 
   const roomEl = document.getElementById('room');
   const roomW = roomEl.clientWidth || 900;
@@ -1874,6 +1910,32 @@ function generateGrid(){
   }
   db.ref(`${ROOT}/layouts/${currentClassId}`).set(newLayout);
   db.ref(`${ROOT}/seating/${currentClassId}`).remove();
+}
+
+/* One-time fix for layouts built with the old, smaller rectangular seats.
+   Scales every table's position away from the layout's top-left corner by
+   how much the desk footprint grew (width and height grew by different
+   amounts, so each axis gets its own factor). Only x/y change — capacity,
+   rotation, seating, and locks are untouched. */
+function fitLayoutToSquareSeats(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  const ids = Object.keys(layout);
+  if(ids.length === 0){ alert('This class has no tables yet.'); return; }
+  if(!confirm('Spread every table in this class apart to fit the new square seats? Seating and locks stay exactly as they are. Only do this once per class — running it again spreads things out even further.')) return;
+
+  const fx = SEAT_PX / OLD_SEAT_W;
+  const fy = deskSize(1).h / OLD_DESK_H;
+  const minX = Math.min(...ids.map(id => layout[id].x));
+  const minY = Math.min(...ids.map(id => layout[id].y));
+
+  const updates = {};
+  ids.forEach(id=>{
+    const d = layout[id];
+    updates[`${ROOT}/layouts/${currentClassId}/${id}/x`] = Math.round(minX + (d.x - minX) * fx);
+    updates[`${ROOT}/layouts/${currentClassId}/${id}/y`] = Math.round(minY + (d.y - minY) * fy);
+  });
+  db.ref().update(updates);
+  setStatus('Tables spread out');
 }
 
 function addDesk(){
@@ -1973,10 +2035,11 @@ function duplicateSelected(){
   const ids = Array.from(selectedDeskIds).filter(id => layout[id]);
   if(ids.length === 0) return;
 
-  const xs = ids.map(id => layout[id].x);
-  const maxX = Math.max(...xs);
-  const minX = Math.min(...xs);
-  const offsetX = (maxX - minX) + 170;
+  // Offset by the full width of the selected group (using real desk sizes)
+  // plus a 40px aisle, so the copies never land on top of the originals.
+  const minX = Math.min(...ids.map(id => layout[id].x));
+  const maxRight = Math.max(...ids.map(id => deskRect(layout[id]).right));
+  const offsetX = (maxRight - minX) + 40;
 
   const updates = {};
   const newIds = [];
@@ -2184,6 +2247,8 @@ function dropOnUnassigned(event){
 }
 
 /* ====== RENDER ====== */
+const UNSEAT_SVG = '<svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>';
+
 function render(){
   const room = document.getElementById('room');
   room.innerHTML = '';
@@ -2204,7 +2269,6 @@ function render(){
 
   Object.entries(layout).forEach(([deskId, pos])=>{
     const capacity = pos.capacity || 1;
-    const deskHasStudent = Object.values(seating[deskId] || {}).some(sid => !!sid);
     const desk = document.createElement('div');
     const isSelected = selectedDeskIds.has(deskId);
     const editingLayout = viewMode === 'editLayout';
@@ -2258,7 +2322,9 @@ function render(){
       seat.className = 'seat' + (studentId ? ' filled' : ' empty') + genderClass + (isLocked ? ' locked' : '') + (hasConflict ? ' conflictWarn' : '');
       seat.style.position = 'relative';
 
+      // Top 3/4: name
       const label = document.createElement('span');
+      label.className = 'seatName';
       label.textContent = studentId && roster[studentId] ? roster[studentId].name : 'Empty';
       if(studentId && editingStudents){
         label.style.cursor = 'pointer';
@@ -2282,22 +2348,32 @@ function render(){
         seat.appendChild(numBadge);
       }
 
+      // Bottom 1/4: editing toolbar (Edit Students mode only)
       if(editingStudents){
-        const lockIcon = document.createElement('span');
-        lockIcon.className = 'lockIcon';
-        lockIcon.textContent = isLocked ? '🔒' : '🔓';
-        lockIcon.title = isLocked ? 'Unlock this seat' : 'Lock this seat in place';
-        lockIcon.onclick = (e)=>{ e.stopPropagation(); toggleLock(deskId, i); };
-        seat.appendChild(lockIcon);
+        const tools = document.createElement('div');
+        tools.className = 'seatTools';
+
+        const lockBtn = document.createElement('button');
+        lockBtn.type = 'button';
+        lockBtn.className = 'lockBtn';
+        lockBtn.textContent = isLocked ? '🔒' : '🔓';
+        lockBtn.title = isLocked ? 'Unlock this seat' : 'Lock this seat in place';
+        lockBtn.setAttribute('aria-label', lockBtn.title);
+        lockBtn.onclick = (e)=>{ e.stopPropagation(); toggleLock(deskId, i); };
+        tools.appendChild(lockBtn);
 
         if(studentId && !isLocked){
-          const removeIcon = document.createElement('span');
-          removeIcon.className = 'removeSeatIcon';
-          removeIcon.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12.5 8c-2.65 0-5.05.99-6.9 2.6L2 7v9h9l-3.62-3.62c1.39-1.16 3.16-1.88 5.12-1.88 3.54 0 6.55 2.31 7.6 5.5l2.37-.78C21.08 11.03 17.15 8 12.5 8z"/></svg>';
-          removeIcon.title = 'Send this student back to Unassigned';
-          removeIcon.onclick = (e)=>{ e.stopPropagation(); unseatSlot(deskId, i); };
-          seat.appendChild(removeIcon);
+          const unseatBtn = document.createElement('button');
+          unseatBtn.type = 'button';
+          unseatBtn.className = 'unseatBtn';
+          unseatBtn.innerHTML = UNSEAT_SVG;
+          unseatBtn.title = 'Send this student back to Unassigned';
+          unseatBtn.setAttribute('aria-label', unseatBtn.title);
+          unseatBtn.onclick = (e)=>{ e.stopPropagation(); unseatSlot(deskId, i); };
+          tools.appendChild(unseatBtn);
         }
+
+        seat.appendChild(tools);
       }
 
       if(editingStudents && !isLocked){
@@ -2680,6 +2756,7 @@ window.applyTemplate = applyTemplate;
 window.saveAsTemplate = saveAsTemplate;
 window.deleteTemplate = deleteTemplate;
 window.generateGrid = generateGrid;
+window.fitLayoutToSquareSeats = fitLayoutToSquareSeats;
 window.addDesk = addDesk;
 window.clearLayout = clearLayout;
 window.toggleSeatNumbers = toggleSeatNumbers;
