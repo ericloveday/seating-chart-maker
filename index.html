@@ -954,6 +954,8 @@
     </ul>
     <p>The toolbar never prints — exported PDFs show just the names.</p>
 
+    <p><b>Locked means locked.</b> A locked student never loses their seat until you unlock it. Place Students and Clear Seats skip them, and any layout change that would delete their seat (Quick Grid, applying a saved layout, Clear Layout, removing their table, or shrinking its seat count) is stopped with a message listing who's in the way. Moving or rotating a table is fine — they ride along with it.</p>
+
     <div class="tip">
       <b>IEP / 504 seating:</b> place the student in the seat they need, click 🔒 to lock it, then hit 📌 Place Students as usual — everyone else fills in around them, and they'll stay locked in for future placements too. Locked students are also excluded from the "Alternate gender" calculation, so they won't throw off the balance.
     </div>
@@ -1874,15 +1876,42 @@ function loadTemplateList(){
   });
 }
 
+/* ====== LOCK PROTECTION ======
+   A locked student never loses their seat until they're unlocked. Any
+   layout change that would delete a desk (or a seat at a desk) holding a
+   locked student is refused, with the names listed. Moving or rotating a
+   table is fine — the student stays in their seat and moves with it. */
+function lockedStudentsAt(deskIds, minSlot){
+  minSlot = minSlot || 0;
+  const names = [];
+  deskIds.forEach(deskId=>{
+    const seats = seating[deskId] || {};
+    Object.entries(seats).forEach(([slot, sid])=>{
+      if(sid && parseInt(slot) >= minSlot && locks[deskId] && locks[deskId][slot]){
+        names.push(roster[sid] ? roster[sid].name : '(unknown student)');
+      }
+    });
+  });
+  return names;
+}
+function blockIfLocked(deskIds, actionText, minSlot){
+  const names = lockedStudentsAt(deskIds, minSlot);
+  if(names.length === 0) return false;
+  alert(`Can't ${actionText} — ${names.length === 1 ? 'this student is' : 'these students are'} in a locked seat that would be removed:\n\n${names.join('\n')}\n\nUnlock ${names.length === 1 ? 'them' : 'them'} first (🔒 in Edit Students mode, or 🔓 Clear All Locks), then try again.`);
+  return true;
+}
+
 function applyTemplate(){
   if(!currentClassId){ alert('Select or create a class first.'); return; }
   const id = document.getElementById('templateSelect').value;
   if(!id){ alert('Choose a saved layout first.'); return; }
   const tmpl = templates[id];
   if(!tmpl) return;
+  if(blockIfLocked(Object.keys(layout), 'apply a new layout')) return;
   if(!confirm(`Apply "${tmpl.name}" to this class? Current desks and seating for this class will be replaced.`)) return;
   db.ref(`${ROOT}/layouts/${currentClassId}`).set(tmpl.desks || {});
   db.ref(`${ROOT}/seating/${currentClassId}`).remove();
+  db.ref(`${ROOT}/locks/${currentClassId}`).remove(); // only empty reserved seats could be left
   setStatus('Layout applied');
 }
 
@@ -1912,6 +1941,7 @@ function generateGrid(){
   const rows = parseInt(document.getElementById('rowsInput').value) || 4;
   const cols = parseInt(document.getElementById('colsInput').value) || 5;
   const capacity = parseInt(document.getElementById('capacitySelect').value) || 1;
+  if(blockIfLocked(Object.keys(layout), 'generate a new grid')) return;
   if(!confirm(`This replaces the current desk layout with a ${rows}x${cols} grid (${capacity} seat${capacity>1?'s':''}/desk). Continue?`)) return;
 
   const { w: deskWidth, h: deskHeight } = deskSize(capacity);
@@ -1932,6 +1962,7 @@ function generateGrid(){
   }
   db.ref(`${ROOT}/layouts/${currentClassId}`).set(newLayout);
   db.ref(`${ROOT}/seating/${currentClassId}`).remove();
+  db.ref(`${ROOT}/locks/${currentClassId}`).remove(); // only empty reserved seats could be left
 }
 
 /* One-time fix for layouts built with the old, smaller rectangular seats.
@@ -1967,14 +1998,17 @@ function addDesk(){
 }
 
 function removeDesk(deskId){
+  if(blockIfLocked([deskId], 'remove this table')) return;
   db.ref(`${ROOT}/layouts/${currentClassId}/${deskId}`).remove();
   db.ref(`${ROOT}/seating/${currentClassId}/${deskId}`).remove();
+  db.ref(`${ROOT}/locks/${currentClassId}/${deskId}`).remove();
 }
 
 function clearLayout(){
   if(!currentClassId){ alert('Select or create a class first.'); return; }
   const count = Object.keys(layout).length;
   if(count === 0){ alert('This class has no tables yet.'); return; }
+  if(blockIfLocked(Object.keys(layout), 'clear the layout')) return;
   if(!confirm(`Remove all ${count} tables from this class? Students stay in the roster and simply return to Unassigned. This can't be undone.`)) return;
   db.ref(`${ROOT}/layouts/${currentClassId}`).remove();
   db.ref(`${ROOT}/seating/${currentClassId}`).remove();
@@ -1993,6 +2027,7 @@ function editCapacity(deskId){
   const val = prompt('How many seats at this desk/table?', current);
   const n = parseInt(val);
   if(!n || n < 1 || n > 6) return;
+  if(n < current && blockIfLocked([deskId], `shrink this table to ${n} seat${n>1?'s':''}`, n)) return;
   db.ref(`${ROOT}/layouts/${currentClassId}/${deskId}/capacity`).set(n);
   const seatsHere = seating[deskId] || {};
   Object.keys(seatsHere).forEach(slot=>{
@@ -2442,6 +2477,7 @@ function render(){
       tools.appendChild(makeBtn('seatsDeskBtn', SEAT_SVG + '<span>' + capacity + '</span>',
         `Change number of seats (currently ${capacity})`, ()=> editCapacity(deskId)));
       tools.appendChild(makeBtn('removeDeskBtn', REMOVE_SVG, 'Remove this table', ()=>{
+        if(blockIfLocked([deskId], 'remove this table')) return;
         if(!confirm('Remove this table? Any student seated there will move back to Unassigned.')) return;
         removeDesk(deskId);
       }));
