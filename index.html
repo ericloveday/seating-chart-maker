@@ -28,6 +28,10 @@
        script (desk geometry for grids, keep-apart, and duplicating). */
     --seat-size:104px;
     --seat-toolbar:26px; /* bottom quarter of the seat */
+    /* Gender shading — strong enough to survive a printer.
+       Used on screen AND in exported PDFs (locked seats included). */
+    --boy-bg:#d3e4f5;     --boy-border:#4f86c0;   /* soft blue */
+    --girl-bg:#d5ecd8;    --girl-border:#4f9a5c;  /* soft green */
   }
   *{box-sizing:border-box;}
   html, body{
@@ -372,16 +376,16 @@
     color: #111827;
   }
 
-  /* Boys: Faded Red (Soft Warm Coral) with Dark Text */
+  /* Boys: soft blue with dark text */
   .seat.filled.male {
-    background-color: #fcf0f0;
-    border-color: #c98383;
+    background-color: var(--boy-bg);
+    border-color: var(--boy-border);
   }
 
-  /* Girls: Faded Purple (Soft Lavender) with Dark Text */
+  /* Girls: soft green with dark text */
   .seat.filled.female {
-    background-color: #f6f0fa;
-    border-color: #a487cf;
+    background-color: var(--girl-bg);
+    border-color: var(--girl-border);
   }
   .seat.empty{
     cursor:default;
@@ -482,14 +486,22 @@
   .deskTools button:focus-visible{ outline:2px solid #2563eb; outline-offset:-2px; }
   .deskTools button svg{ width:15px; height:15px; fill:currentColor; flex:none; }
   .deskTools button.removeDeskBtn:hover{ background:var(--red); color:#fff; }
-  #room.printing .seat.locked{
-    border-color:var(--dark-gray-border) !important;
-    background:#fff !important;
-    color:var(--text) !important;
-  }
+  /* PDF export: locked and keep-apart seats print exactly like every other
+     seat — gender shading kept, no gold, no red. */
+  #room.printing .seat.locked,
   #room.printing .seat.conflictWarn{
     border-color:var(--dark-gray-border) !important;
+    background:#fff !important;
+    color:#111827 !important;
     box-shadow:none !important;
+  }
+  #room.printing .seat.filled.male{
+    background:var(--boy-bg) !important;
+    border-color:var(--boy-border) !important;
+  }
+  #room.printing .seat.filled.female{
+    background:var(--girl-bg) !important;
+    border-color:var(--girl-border) !important;
   }
   #room.printing .conflictIcon{display:none;}
   #room.printing .deskTools{display:none;}
@@ -929,7 +941,7 @@
       <li><b>📌 Place Students:</b> fills every unlocked seat with unlocked students, using whatever's chosen in the <b>Order</b> dropdown, starting from the front row (bottom of the layout) and working back, and steering around Keep Apart conflicts wherever it can.</li>
       <li><b>Order</b> dropdown controls how students get placed: Random (default), or Alphabetical by first/last name — great for a simple, predictable seating chart instead of a shuffle.</li>
       <li><b>Alternate gender</b> checkbox: interleaves boy/girl in seat order instead of pure random. Only applies when Order is set to Random.</li>
-      <li><b>Clear Seats:</b> sends everyone back to Unassigned (does not touch desks).</li>
+      <li><b>Clear Seats:</b> sends everyone in an unlocked seat back to Unassigned. Locked seats and the students in them stay put, and their locks are kept. To clear everyone, use 🔓 Clear All Locks first. Desks are never touched.</li>
     </ul>
 
     <h3>Seat toolbar (visible in Edit Students mode)</h3>
@@ -947,7 +959,7 @@
     </div>
 
     <h3>Exporting</h3>
-    <p>📄 Export PDF opens a small picker so you can choose Landscape, Portrait, or Auto (Best Fit) — Auto captures the current layout and automatically picks whichever page orientation prints it biggest for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Locked seats show a gold highlight in the app, but print as normal seats — no shading in the printed version. Export PDF works from any of the three view modes.</p>
+    <p>📄 Export PDF opens a small picker so you can choose Landscape, Portrait, or Auto (Best Fit) — Auto captures the current layout and automatically picks whichever page orientation prints it biggest for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Seats are shaded by gender (blue for boys, green for girls) both in the app and on the printout. Locked seats show a gold highlight in the app, but print exactly like every other seat, with their normal gender shading. Export PDF works from any of the three view modes.</p>
     <p><b>🔢 Seat Numbers</b> (toolbar, always visible) puts a small numbered badge on the top-left corner of every seat, numbered top-to-bottom then left-to-right across the whole layout. This is the same numbering used on <b>🏷️ Desk Labels</b>, so "Seat 5" in the app and "Seat 5" on a printed label always mean the same physical seat — handy for matching a sticker to a desk. Desk Labels are formatted for real <b>Avery 58163</b> sheets (2" x 4" labels, 10 per sheet) and include the class name(s) for that seat plus the seat number.</p>
 
     <div class="btnRow">
@@ -2213,11 +2225,30 @@ function renameStudent(id){
   setStatus('Name updated');
 }
 
+// Sends every student in an UNLOCKED seat back to Unassigned. Locked seats
+// (and the students in them) stay exactly as they are, and locks are kept.
 function clearSeats(){
   if(!currentClassId) return;
-  if(!confirm('Send all students back to Unassigned?')) return;
-  db.ref(`${ROOT}/seating/${currentClassId}`).remove();
-  db.ref(`${ROOT}/locks/${currentClassId}`).remove();
+  const updates = {};
+  let lockedKept = 0;
+  Object.entries(seating).forEach(([deskId, seats])=>{
+    Object.entries(seats||{}).forEach(([slot, sid])=>{
+      if(!sid) return;
+      if(locks[deskId] && locks[deskId][slot]){ lockedKept++; return; }
+      updates[`${deskId}/${slot}`] = null;
+    });
+  });
+  const toClear = Object.keys(updates).length;
+  if(toClear === 0){
+    alert(lockedKept ? 'Everyone still seated is in a locked seat. Unlock seats first (or use Clear All Locks) if you want them cleared too.' : 'No one is seated yet.');
+    return;
+  }
+  const msg = lockedKept
+    ? `Send ${toClear} student${toClear>1?'s':''} back to Unassigned? ${lockedKept} student${lockedKept>1?'s':''} in locked seats will stay put.`
+    : `Send all ${toClear} student${toClear>1?'s':''} back to Unassigned?`;
+  if(!confirm(msg)) return;
+  db.ref(`${ROOT}/seating/${currentClassId}`).update(updates);
+  setStatus('Seats cleared');
 }
 
 function clearAllLocks(){
