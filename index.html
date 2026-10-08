@@ -751,11 +751,6 @@
     <button id="doneBtn" onclick="setViewMode('clean')" style="display:none;">✅ Done</button>
   </div>
 
-  <div class="group" data-mode="students">
-    <button class="secondary" onclick="openKeepAwayModal()">Keep-Apart Groups</button>
-    
-  </div>
-
   <div class="group" data-mode="layout">
     <label>Saved Layout</label>
     <select id="templateSelect"><option value="">-- choose template --</option></select>
@@ -799,7 +794,9 @@
     <button class="secondary" onclick="clearSeats()">Clear Seats</button>
     <button class="secondary" onclick="clearAllLocks()">🔓 Clear All Locks</button>
   </div>
-
+<div class="group" data-mode="students">
+    <button class="secondary" onclick="openKeepAwayModal()">Keep-Apart Groups</button>
+  </div>
   <div class="group" data-mode="students">
     <button class="secondary" onclick="window.open('https://ericloveday.github.io/seating-chart-maker/kagan-team-importer.html','_blank')">Kagan Group Import</button>
     <span style="font-size:11px;color:var(--muted);">Opens a separate tool (same sign-in) that ranks students by score and auto-seats balanced Kagan groups into this class's existing table layout.</span>
