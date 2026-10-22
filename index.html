@@ -9,7 +9,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
@@ -2669,7 +2668,204 @@ function startDeskDrag(e, deskId, deskEl){
   document.addEventListener('mouseup', onUp);
 }
 
-/* ====== EXPORT PDF ====== */
+/* ====== EXPORT PDF ======
+   Draws the chart straight into the PDF as shapes and text instead of
+   screenshotting #room. The old html2canvas screenshot was limited to the
+   size #room happened to be on screen (it's a flex child locked to the
+   window height), so tables past that edge were clipped before the PDF
+   was even built — which is why Landscape and Portrait cut off the same
+   table in the same place. This version works from the layout data, crops
+   to the tables themselves (no empty grid around them), and scales that
+   to fill the chosen page. */
+const PRINT_COLORS = {
+  male:   { fill:'#d3e4f5', stroke:'#4f86c0' },
+  female: { fill:'#d5ecd8', stroke:'#4f9a5c' },
+  none:   { fill:'#ffffff', stroke:'#8f959e' },
+  desk:   '#6b7079',
+  name:   '#111827',
+  empty:  '#9ca3af',
+  badge:  '#2563eb'
+};
+
+function hexToRgb(hex){
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+// Where every table and seat really sits in room pixels, including
+// 90/180/270 rotation (CSS turns each table around its own center).
+// Single desks render with no padding/border, so they're just one seat.
+function computePrintGeometry(layoutObj){
+  const desks = [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  const inset = DESK_PAD + DESK_BORDER;
+
+  Object.entries(layoutObj).forEach(([deskId, pos])=>{
+    const cap = pos.capacity || 1;
+    const single = cap === 1;
+    const w = single ? SEAT_PX : deskSize(cap).w;
+    const h = single ? SEAT_PX : deskSize(cap).h;
+    const cx = pos.x + w / 2, cy = pos.y + h / 2;
+    const rot = (((pos.rotation || 0) % 360) + 360) % 360;
+    const rad = rot * Math.PI / 180;
+    const cos = Math.round(Math.cos(rad)), sin = Math.round(Math.sin(rad));
+    const sideways = rot === 90 || rot === 270;
+    const bw = sideways ? h : w, bh = sideways ? w : h;
+
+    const seats = [];
+    for(let i = 0; i < cap; i++){
+      const lx = single ? SEAT_PX / 2 : inset + i * (SEAT_PX + DESK_GAP) + SEAT_PX / 2;
+      const ly = single ? SEAT_PX / 2 : inset + SEAT_PX / 2;
+      const dx = lx - w / 2, dy = ly - h / 2;
+      seats.push({
+        slot: i,
+        x: cx + dx * cos - dy * sin - SEAT_PX / 2,
+        y: cy + dx * sin + dy * cos - SEAT_PX / 2
+      });
+    }
+
+    minX = Math.min(minX, cx - bw / 2); maxX = Math.max(maxX, cx + bw / 2);
+    minY = Math.min(minY, cy - bh / 2); maxY = Math.max(maxY, cy + bh / 2);
+    desks.push({
+      deskId,
+      outline: single ? null : { x: cx - bw / 2, y: cy - bh / 2, w: bw, h: bh },
+      seats
+    });
+  });
+
+  return { desks, bounds: { x: minX, y: minY, w: maxX - minX, h: maxY - minY } };
+}
+
+// Greedy word wrap that breaks only at spaces or right after a hyphen.
+function wrapName(pdf, text, maxW){
+  const tokens = text.trim().split(/\s+/).flatMap(w => w.split(/(?<=-)/));
+  const lines = [];
+  let line = '';
+  tokens.forEach(tok=>{
+    const joiner = (line && !line.endsWith('-')) ? ' ' : '';
+    const tryLine = line + joiner + tok;
+    if(!line || pdf.getTextWidth(tryLine) <= maxW) line = tryLine;
+    else { lines.push(line); line = tok; }
+  });
+  if(line) lines.push(line);
+  return lines;
+}
+
+// Biggest font size (down to 6pt) at which the name fits inside the seat,
+// wrapping between words (never mid-word) when that lets it stay bigger.
+function fitSeatName(pdf, text, maxW, maxH, startSize){
+  pdf.setFont('helvetica', 'bold');
+  for(let fs = startSize; fs >= 6; fs -= 0.5){
+    pdf.setFontSize(fs);
+    const lines = wrapName(pdf, text, maxW);
+    const tooWide = lines.some(l => pdf.getTextWidth(l) > maxW);
+    if(!tooWide && lines.length * fs * 1.15 <= maxH) return { fs, lines };
+  }
+  pdf.setFontSize(6);
+  return { fs: 6, lines: pdf.splitTextToSize(text, maxW) };
+}
+
+function buildSeatingPDF(opts){
+  const { jsPDF, layoutObj, seatingObj, rosterObj, title, teacher, orientationChoice, seatNumbering } = opts;
+  const geo = computePrintGeometry(layoutObj);
+
+  const margin = 30, headerSpace = 44;
+  const pages = { landscape: { w: 792, h: 612 }, portrait: { w: 612, h: 792 } };
+  const fitScale = p => Math.min(
+    (p.w - margin * 2) / geo.bounds.w,
+    (p.h - margin * 2 - headerSpace) / geo.bounds.h
+  );
+
+  // Auto = whichever orientation prints the tables bigger.
+  let orient = orientationChoice;
+  if(orient !== 'landscape' && orient !== 'portrait'){
+    orient = fitScale(pages.portrait) > fitScale(pages.landscape) ? 'portrait' : 'landscape';
+  }
+  const page = pages[orient];
+  const scale = fitScale(page);
+  const areaW = page.w - margin * 2, areaH = page.h - margin * 2 - headerSpace;
+  const offX = margin + (areaW - geo.bounds.w * scale) / 2;
+  const offY = margin + headerSpace + (areaH - geo.bounds.h * scale) / 2;
+  const X = v => offX + (v - geo.bounds.x) * scale;
+  const Y = v => offY + (v - geo.bounds.y) * scale;
+
+  const pdf = new jsPDF({ orientation: orient, unit: 'pt', format: 'letter' });
+
+  // Header
+  const now = new Date();
+  const dateStr = now.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  const timeStr = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  pdf.setFont('helvetica', 'bold');
+  pdf.setFontSize(20);
+  pdf.setTextColor(206, 31, 7);
+  pdf.text(teacher ? `${teacher}: ${title}` : title, page.w / 2, margin, { align: 'center' });
+  pdf.setFont('helvetica', 'normal');
+  pdf.setFontSize(11);
+  pdf.setTextColor(100, 100, 100);
+  pdf.text(`${dateStr} ${timeStr}`, page.w / 2, margin + 16, { align: 'center' });
+
+  const seatSide = SEAT_PX * scale;
+  const radius = 6 * scale;
+  const pad = 7 * scale;
+  const lineW = Math.max(0.75, 2 * scale);
+  const maxFont = Math.min(18, Math.max(7, seatSide * 0.17));
+
+  geo.desks.forEach(d=>{
+    if(d.outline){
+      pdf.setLineWidth(lineW);
+      pdf.setDrawColor(...hexToRgb(PRINT_COLORS.desk));
+      pdf.setFillColor(255, 255, 255);
+      pdf.rect(X(d.outline.x), Y(d.outline.y), d.outline.w * scale, d.outline.h * scale, 'FD');
+    }
+
+    d.seats.forEach(s=>{
+      const deskSeats = seatingObj[d.deskId];
+      const sid = deskSeats ? deskSeats[s.slot] : null;
+      const stu = sid ? rosterObj[sid] : null;
+      const colors = stu && stu.gender === 'M' ? PRINT_COLORS.male
+                   : stu && stu.gender === 'F' ? PRINT_COLORS.female
+                   : PRINT_COLORS.none;
+      const sx = X(s.x), sy = Y(s.y);
+      const cx = sx + seatSide / 2, cy = sy + seatSide / 2;
+
+      pdf.setLineWidth(lineW);
+      pdf.setDrawColor(...hexToRgb(colors.stroke));
+      pdf.setFillColor(...hexToRgb(colors.fill));
+      pdf.roundedRect(sx, sy, seatSide, seatSide, radius, radius, 'FD');
+
+      if(stu){
+        const { fs, lines } = fitSeatName(pdf, stu.name, seatSide - pad * 2, seatSide - pad * 2, maxFont);
+        pdf.setFontSize(fs);
+        pdf.setTextColor(...hexToRgb(PRINT_COLORS.name));
+        const lh = fs * 1.15;
+        lines.forEach((line, k)=>{
+          pdf.text(line, cx, cy - (lines.length - 1) * lh / 2 + k * lh, { align: 'center', baseline: 'middle' });
+        });
+      } else {
+        pdf.setFont('helvetica', 'italic');
+        pdf.setFontSize(Math.max(6, maxFont * 0.75));
+        pdf.setTextColor(...hexToRgb(PRINT_COLORS.empty));
+        pdf.text('Empty', cx, cy, { align: 'center', baseline: 'middle' });
+      }
+
+      // Seat number badge — only when the 🔢 Seat Numbers toggle is on.
+      const num = seatNumbering && seatNumbering[d.deskId] ? seatNumbering[d.deskId][s.slot] : undefined;
+      if(num !== undefined){
+        const r = Math.max(5, 9 * scale);
+        const bx = sx + r + 2 * scale, by = sy + r + 2 * scale;
+        pdf.setFillColor(...hexToRgb(PRINT_COLORS.badge));
+        pdf.circle(bx, by, r, 'F');
+        pdf.setFont('helvetica', 'bold');
+        pdf.setFontSize(r * 1.05);
+        pdf.setTextColor(255, 255, 255);
+        pdf.text(String(num), bx, by, { align: 'center', baseline: 'middle' });
+      }
+    });
+  });
+
+  return { pdf, now };
+}
+
 function openExportModal(){
   if(!currentClassId){ alert('Select a class first.'); return; }
   if(Object.keys(layout).length === 0){ alert('No desks to export yet.'); return; }
@@ -2681,147 +2877,32 @@ function closeExportModal(){
 }
 
 function exportPDF(orientationChoice){
-  orientationChoice = orientationChoice || 'auto';
   closeExportModal();
-
   if(!currentClassId){ alert('Select a class first.'); return; }
-  const room = document.getElementById('room');
   if(Object.keys(layout).length === 0){ alert('No desks to export yet.'); return; }
 
-  const title = document.getElementById('roomTitle').textContent;
-  const originalOverflow = room.style.overflow;
-  const originalHeight = room.style.height;
-  const originalWidth = room.style.width;
-
-  room.classList.add('printing');
-  room.style.overflow = 'visible';
-  // Lock in BOTH dimensions from scroll size before capture. Without this,
-  // #room stays at whatever width:100% happens to render as at the current
-  // window/zoom level, and any desk positioned past that edge gets clipped
-  // by html2canvas even though overflow is visible.
-  room.style.width = room.scrollWidth + 'px';
-  room.style.height = room.scrollHeight + 'px';
-
   setStatus('Building PDF...');
-
-  // html2canvas renders inside its own hidden clone of the page, sized by
-  // default to the CURRENT browser viewport (windowWidth/windowHeight) — not
-  // to the page's actual scrollable size. So even with #room's own box now
-  // correctly sized above, anything past the real window edge still fell
-  // outside that hidden render frame and got clipped. Forcing windowWidth/
-  // windowHeight to cover #room's full expanded position+size fixes that.
-  const roomRect = room.getBoundingClientRect();
-  const renderWidth = Math.ceil(roomRect.left + window.scrollX + room.scrollWidth) + 20;
-  const renderHeight = Math.ceil(roomRect.top + window.scrollY + room.scrollHeight) + 20;
-
-  html2canvas(room, {
-    backgroundColor: '#ffffff',
-    scale: 2,
-    windowWidth: renderWidth,
-    windowHeight: renderHeight
-  }).then(canvas => {
-    room.classList.remove('printing');
-    room.style.overflow = originalOverflow;
-    room.style.width = originalWidth;
-    room.style.height = originalHeight;
-
-    const margin = 30;
-    const headerSpace = 52;
-    const origW = canvas.width / 2;
-    const origH = canvas.height / 2;
-
-    const landscapeW = 792, landscapeH = 612;
-    const portraitW = 612, portraitH = 792;
-
-    // useRotated only ever applies in 'auto' mode — it decides whether to
-    // rotate the captured canvas 90° so it fits a portrait page bigger than
-    // it would fit an unrotated landscape page. An explicit landscape/portrait
-    // choice always uses the canvas as-is, just scaled to that page size.
-    let useRotated = false;
-    let pageW, pageH, pdfOrientation;
-
-    if(orientationChoice === 'landscape'){
-      pageW = landscapeW; pageH = landscapeH; pdfOrientation = 'landscape';
-    } else if(orientationChoice === 'portrait'){
-      pageW = portraitW; pageH = portraitH; pdfOrientation = 'portrait';
-    } else {
-      const scaleLandscape = Math.min(
-        (landscapeW - margin * 2) / origW,
-        (landscapeH - margin * 2 - headerSpace) / origH
-      );
-      const scalePortraitRotated = Math.min(
-        (portraitW - margin * 2) / origH,
-        (portraitH - margin * 2 - headerSpace) / origW
-      );
-      useRotated = scalePortraitRotated > scaleLandscape;
-      pageW = useRotated ? portraitW : landscapeW;
-      pageH = useRotated ? portraitH : landscapeH;
-      pdfOrientation = useRotated ? 'portrait' : 'landscape';
-    }
-
-    let sourceCanvas = canvas;
-    let nativeImgW = origW, nativeImgH = origH;
-
-    if(useRotated){
-      const rotated = document.createElement('canvas');
-      rotated.width = canvas.height;
-      rotated.height = canvas.width;
-      const rctx = rotated.getContext('2d');
-      rctx.translate(rotated.width, 0);
-      rctx.rotate(Math.PI / 2);
-      rctx.drawImage(canvas, 0, 0);
-      sourceCanvas = rotated;
-      nativeImgW = rotated.width / 2;
-      nativeImgH = rotated.height / 2;
-    }
-
-    const imgData = sourceCanvas.toDataURL('image/png');
-    const { jsPDF } = window.jspdf;
-
-    const availW = pageW - margin * 2;
-    const availH = pageH - margin * 2 - headerSpace;
-    const scale = Math.min(availW / nativeImgW, availH / nativeImgH);
-    const imgW = nativeImgW * scale;
-    const imgH = nativeImgH * scale;
-    const imgX = margin + (availW - imgW) / 2;
-
-    const now = new Date();
-    const dateStr = now.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
-    const timeStr = now.toLocaleTimeString(undefined, { hour:'numeric', minute:'2-digit' });
-
-    const pdf = new jsPDF({
-      orientation: pdfOrientation,
-      unit: 'pt',
-      format: 'letter'
+  try{
+    const title = document.getElementById('roomTitle').textContent;
+    const { pdf, now } = buildSeatingPDF({
+      jsPDF: window.jspdf.jsPDF,
+      layoutObj: layout,
+      seatingObj: seating,
+      rosterObj: roster,
+      title,
+      teacher: document.getElementById('teacherNameInput').value.trim(),
+      orientationChoice: orientationChoice || 'auto',
+      seatNumbering: showSeatNumbers ? computeSeatNumbering(layout) : null
     });
-
-    pdf.setFont('helvetica', 'bold');
-    pdf.setFontSize(20);
-    pdf.setTextColor(206, 31, 7);
-    const currentTeacherName = document.getElementById('teacherNameInput').value.trim();
-    const headerTitle = currentTeacherName ? `${currentTeacherName}: ${title}` : title;
-    pdf.text(headerTitle, pageW / 2, margin, { align: 'center' });
-
-    pdf.setFont('helvetica', 'normal');
-    pdf.setFontSize(11);
-    pdf.setTextColor(100, 100, 100);
-    pdf.text(`${dateStr} ${timeStr}`, pageW / 2, margin + 16, { align: 'center' });
-
-    pdf.addImage(imgData, 'PNG', imgX, margin + 32, imgW, imgH);
-
     const stamp = now.toISOString().slice(0,16).replace('T','_').replace(':','-');
-    const fileName = title.replace(/[^a-z0-9]+/gi, '_') + '_seating_chart_' + stamp + '.pdf';
-    pdf.save(fileName);
+    pdf.save(title.replace(/[^a-z0-9]+/gi, '_') + '_seating_chart_' + stamp + '.pdf');
     setStatus('PDF saved');
-  }).catch(err => {
-    room.classList.remove('printing');
-    room.style.overflow = originalOverflow;
-    room.style.width = originalWidth;
-    room.style.height = originalHeight;
+  } catch(err){
+    console.error('Export failed:', err);
+    setStatus('Ready');
     alert('Export failed: ' + err.message);
-  });
+  }
 }
-
 /* ====== EXPOSE FUNCTIONS ====== */
 window.togglePanel = togglePanel;
 window.saveTeacherName = saveTeacherName;
