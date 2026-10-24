@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Move Bleacher Charts into Seating Chart Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --red:#ce1f07; --red-dark:#a31905; --green:#1a7a3c;
+    --bg:#f4f5f7; --card:#fff; --border:#dfe2e6; --text:#222; --muted:#6b7280;
+  }
+  *{box-sizing:border-box;}
+  body{font-family:'Montserrat',sans-serif;margin:0;background:var(--bg);color:var(--text);}
+  header{background:var(--red);color:#fff;padding:14px 22px;}
+  header h1{margin:0;font-size:20px;font-weight:800;}
+  header p{margin:4px 0 0;font-size:13px;opacity:.9;}
+  main{max-width:760px;margin:22px auto;padding:0 16px;display:flex;flex-direction:column;gap:16px;}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px;}
+  .card h2{margin:0 0 4px;font-size:16px;font-weight:800;}
+  .card .sub{margin:0 0 14px;font-size:13px;color:var(--muted);line-height:1.5;}
+  .card.disabled{opacity:.45;pointer-events:none;}
+  label.field{display:block;font-size:12px;font-weight:700;color:var(--muted);margin:10px 0 5px;}
+  input[type=text],input[type=password]{width:100%;font-family:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;}
+  input:focus-visible,button:focus-visible{outline:2px solid #2563eb;outline-offset:2px;}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;margin-top:12px;cursor:pointer;}
+  .check input{width:auto;margin:0;}
+  button{font-family:inherit;font-weight:700;font-size:14px;padding:10px 16px;border:none;border-radius:6px;background:var(--red);color:#fff;cursor:pointer;margin-top:14px;}
+  button:hover{background:var(--red-dark);}
+  button:disabled{background:#c9c9c9;cursor:default;}
+  .status{font-size:13px;margin-top:10px;line-height:1.5;}
+  .ok{color:var(--green);font-weight:700;}
+  .err{color:var(--red-dark);font-weight:700;}
+  .chartRow{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:center;padding:12px;border:1px solid var(--border);border-radius:8px;margin-bottom:10px;background:#fafafa;}
+  .chartRow input[type=checkbox]{width:18px;height:18px;margin:0;}
+  .chartRow .title{font-weight:800;font-size:14px;}
+  .chartRow .meta{grid-column:2;font-size:12px;color:var(--muted);}
+  .chartRow .nameWrap{grid-column:2;}
+  .chartRow .warn{grid-column:2;font-size:12px;color:#7a5c00;background:#fff8e1;border:1px solid #f0d78c;border-radius:6px;padding:6px 8px;}
+  #log{font-size:13px;line-height:1.7;margin-top:12px;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Move bleacher charts into Seating Chart Maker</h1>
+  <p>Copies each bleacher chart into a new class and saves the bleacher layout as “Bleachers.” Nothing in the old bleacher app is changed or deleted.</p>
+</header>
+
+<main>
+  <section class="card" id="step1">
+    <h2>1. Sign in to both apps</h2>
+    <p class="sub">The two apps live in separate Firebase projects, so this page signs into each one.</p>
+    <label class="field" for="scEmail">Seating Chart Maker email</label>
+    <input type="text" id="scEmail" placeholder="you@cornerstonek12.org" autocomplete="username">
+    <label class="field" for="scPass">Seating Chart Maker password</label>
+    <input type="password" id="scPass" autocomplete="current-password">
+
+    <label class="check"><input type="checkbox" id="sameCreds" checked> Bleacher app uses the same email and password</label>
+
+    <div id="blCredsWrap" style="display:none;">
+      <label class="field" for="blEmail">Bleacher app email</label>
+      <input type="text" id="blEmail" placeholder="you@cornerstonek12.org">
+      <label class="field" for="blPass">Bleacher app password</label>
+      <input type="password" id="blPass">
+    </div>
+
+    <button id="signInBtn">Sign in to both</button>
+    <div class="status" id="signInStatus"></div>
+  </section>
+
+  <section class="card disabled" id="step2">
+    <h2>2. Pick the bleacher charts to move</h2>
+    <p class="sub">Each checked chart becomes its own class, with its roster, seats, and locks carried over. Running this again updates the same class instead of making a duplicate.</p>
+    <div id="chartList"></div>
+    <label class="check"><input type="checkbox" id="saveTemplate" checked> Also save the bleacher layout as a saved layout named “Bleachers”</label>
+    <button id="migrateBtn">Move checked charts</button>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script>
+/* ====== TWO FIREBASE PROJECTS ====== */
+const seatingConfig = {
+  apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
+  authDomain: "bathroom-check-out.firebaseapp.com",
+  databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
+  projectId: "bathroom-check-out",
+  storageBucket: "bathroom-check-out.firebasestorage.app",
+  messagingSenderId: "385219454253",
+  appId: "1:385219454253:web:970acbfe28672f73c45fa4"
+};
+const bleacherConfig = {
+  apiKey: "AIzaSyD9BOvHD1B9px_xmXwHBfE1b4VPTRolIPI",
+  authDomain: "cca-bleacher-seating.firebaseapp.com",
+  databaseURL: "https://cca-bleacher-seating-default-rtdb.firebaseio.com",
+  projectId: "cca-bleacher-seating",
+  storageBucket: "cca-bleacher-seating.firebasestorage.app",
+  messagingSenderId: "1052980650289",
+  appId: "1:1052980650289:web:325ff047a96e93fc6a5010"
+};
+const scApp = firebase.initializeApp(seatingConfig, 'seating');
+const blApp = firebase.initializeApp(bleacherConfig, 'bleacher');
+const scDb = scApp.database();
+const blDb = blApp.database();
+
+/* ====== BLEACHER GEOMETRY ======
+   Same sections/rows as the bleacher app (2 / 4 / 4 / 2 columns, 10 rows).
+   Each row of each section becomes one table in Seating Chart Maker, sized
+   with that app's own desk math so nothing overlaps. Rows sit 6px apart
+   (close enough that Keep-Apart treats the row behind you as "near");
+   sections sit 40px apart (an aisle, so across-the-aisle isn't "near"). */
+const SECTIONS = [{id:'s1',cols:2},{id:'s2',cols:4},{id:'s3',cols:4},{id:'s4',cols:2}];
+const ROWS = 10;
+const SEAT_PX = 104, DESK_PAD = 4, DESK_GAP = 4, DESK_BORDER = 2;
+const START_X = 15, START_Y = 15, AISLE = 40, ROW_GAP = 6;
+
+function deskSize(cap){
+  return {
+    w: cap * SEAT_PX + (cap - 1) * DESK_GAP + DESK_PAD * 2 + DESK_BORDER * 2,
+    h: SEAT_PX + DESK_PAD * 2 + DESK_BORDER * 2
+  };
+}
+function deskIdFor(sectionId, row){ return `bl_${sectionId}_r${row}`; }
+
+function buildBleacherLayout(){
+  const layout = {};
+  let x = START_X;
+  SECTIONS.forEach(sec=>{
+    const { w, h } = deskSize(sec.cols);
+    for(let r = 0; r < ROWS; r++){
+      layout[deskIdFor(sec.id, r)] = { x, y: START_Y + r * (h + ROW_GAP), capacity: sec.cols, rotation: 0 };
+    }
+    x += w + AISLE;
+  });
+  return layout;
+}
+
+// "s2_r3_c1" -> { deskId: "bl_s2_r3", slot: "1" }
+function convertSeatId(seatId){
+  const m = /^(s\d+)_r(\d+)_c(\d+)$/.exec(seatId);
+  return m ? { deskId: deskIdFor(m[1], m[2]), slot: m[3] } : null;
+}
+
+/* ====== STEP 1: SIGN IN ====== */
+const sameCreds = document.getElementById('sameCreds');
+sameCreds.addEventListener('change', ()=>{
+  document.getElementById('blCredsWrap').style.display = sameCreds.checked ? 'none' : 'block';
+});
+
+let scUid = null, blUid = null;
+let blData = null;      // bleacherSeating/{uid}
+let scClasses = {};     // seatingCharts/{uid}/classes
+
+document.getElementById('signInBtn').addEventListener('click', async ()=>{
+  const status = document.getElementById('signInStatus');
+  const scEmail = document.getElementById('scEmail').value.trim();
+  const scPass = document.getElementById('scPass').value;
+  const blEmail = sameCreds.checked ? scEmail : document.getElementById('blEmail').value.trim();
+  const blPass = sameCreds.checked ? scPass : document.getElementById('blPass').value;
+  if(!scEmail || !scPass || !blEmail || !blPass){
+    status.innerHTML = '<span class="err">Enter an email and password for both apps.</span>';
+    return;
+  }
+  status.textContent = 'Signing in…';
+
+  const msgs = [];
+  try{
+    const r = await scApp.auth().signInWithEmailAndPassword(scEmail, scPass);
+    scUid = r.user.uid;
+    msgs.push('<span class="ok">✓ Seating Chart Maker signed in</span>');
+  }catch(e){
+    msgs.push('<span class="err">Seating Chart Maker sign-in failed. Check that email and password.</span>');
+  }
+  try{
+    const r = await blApp.auth().signInWithEmailAndPassword(blEmail, blPass);
+    blUid = r.user.uid;
+    msgs.push('<span class="ok">✓ Bleacher app signed in</span>');
+  }catch(e){
+    msgs.push('<span class="err">Bleacher app sign-in failed. If it uses a different password, uncheck “same email and password” and enter it separately.</span>');
+  }
+  status.innerHTML = msgs.join('<br>');
+  if(scUid && blUid) loadCharts();
+});
+
+/* ====== STEP 2: LIST CHARTS ====== */
+async function loadCharts(){
+  const list = document.getElementById('chartList');
+  list.textContent = 'Loading bleacher charts…';
+  try{
+    const [blSnap, scSnap] = await Promise.all([
+      blDb.ref(`bleacherSeating/${blUid}`).once('value'),
+      scDb.ref(`seatingCharts/${scUid}/classes`).once('value')
+    ]);
+    blData = blSnap.val() || {};
+    scClasses = scSnap.val() || {};
+  }catch(e){
+    list.innerHTML = `<span class="err">Could not read data: ${e.message}</span>`;
+    return;
+  }
+
+  const charts = blData.charts || {};
+  const entries = Object.entries(charts).sort((a,b)=> (a[1].name||'').localeCompare(b[1].name||''));
+  list.innerHTML = '';
+  if(entries.length === 0){
+    list.innerHTML = '<span class="err">No bleacher charts found under this account.</span>';
+    return;
+  }
+
+  entries.forEach(([chartId, c])=>{
+    const roster = (blData.rosters || {})[chartId] || {};
+    const seating = (blData.seating || {})[chartId] || {};
+    const studentCount = Object.keys(roster).length;
+    const seatedCount = Object.values(seating).filter(Boolean).length;
+    const classId = 'class_bl_' + chartId;
+    const isDefault = (c.name || '').trim().toLowerCase() === 'default';
+    const suggested = isDefault || entries.length === 1 ? 'Bleachers' : `Bleachers - ${c.name}`;
+
+    const row = document.createElement('div');
+    row.className = 'chartRow';
+    row.innerHTML = `
+      <input type="checkbox" data-chart="${chartId}" ${studentCount ? 'checked' : ''} aria-label="Move ${escapeHtml(c.name)}">
+      <div class="title">${escapeHtml(c.name || '(unnamed chart)')}</div>
+      <div class="meta">${studentCount} student${studentCount===1?'':'s'}, ${seatedCount} seated</div>
+      <div class="nameWrap">
+        <label class="field" for="name_${chartId}">New class name</label>
+        <input type="text" id="name_${chartId}" value="${escapeHtml(scClasses[classId] ? scClasses[classId].name : suggested)}">
+      </div>`;
+    if(scClasses[classId]){
+      const w = document.createElement('div');
+      w.className = 'warn';
+      w.textContent = `Already moved once as “${scClasses[classId].name}.” Moving again replaces that class’s roster and seats with the current bleacher data.`;
+      row.appendChild(w);
+    }
+    list.appendChild(row);
+  });
+
+  document.getElementById('step2').classList.remove('disabled');
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+/* ====== STEP 3: MIGRATE ======
+   One multi-path update per run. It only writes the paths for the new
+   class(es) and the "Bleachers" template, so every existing class in
+   Seating Chart Maker is left exactly as it is. */
+document.getElementById('migrateBtn').addEventListener('click', async ()=>{
+  const log = document.getElementById('log');
+  const picked = Array.from(document.querySelectorAll('#chartList input[type=checkbox]:checked')).map(cb=>cb.dataset.chart);
+  if(picked.length === 0){ log.innerHTML = '<span class="err">Check at least one chart.</span>'; return; }
+
+  const existingNames = new Set(Object.entries(scClasses).map(([id,c])=> id + '|' + (c.name||'').trim().toLowerCase()));
+  const layout = buildBleacherLayout();
+  const root = `seatingCharts/${scUid}`;
+  const updates = {};
+  const lines = [];
+
+  for(const chartId of picked){
+    const classId = 'class_bl_' + chartId;
+    const name = document.getElementById('name_' + chartId).value.trim();
+    if(!name){ log.innerHTML = '<span class="err">Every checked chart needs a class name.</span>'; return; }
+
+    // Name clash with a different, unrelated class?
+    const clash = Object.entries(scClasses).find(([id,c])=> id !== classId && (c.name||'').trim().toLowerCase() === name.toLowerCase());
+    if(clash){
+      log.innerHTML = `<span class="err">You already have a class named “${escapeHtml(name)}.” Pick a different name.</span>`;
+      return;
+    }
+
+    const oldRoster = (blData.rosters || {})[chartId] || {};
+    const oldSeating = (blData.seating || {})[chartId] || {};
+    const oldLocks = (blData.locks || {})[chartId] || {};
+
+    const roster = {};
+    Object.entries(oldRoster).forEach(([stuId, s])=>{
+      roster[stuId] = { name: (s && s.name) || '', gender: (s && s.gender) || '' };
+    });
+
+    const seating = {};
+    let seated = 0, skipped = 0;
+    Object.entries(oldSeating).forEach(([seatId, stuId])=>{
+      const t = convertSeatId(seatId);
+      if(!t || !stuId || !roster[stuId]){ skipped++; return; }
+      seating[t.deskId] = seating[t.deskId] || {};
+      seating[t.deskId][t.slot] = stuId;
+      seated++;
+    });
+
+    const locks = {};
+    let lockCount = 0;
+    Object.entries(oldLocks).forEach(([seatId, on])=>{
+      const t = convertSeatId(seatId);
+      if(!t || !on) return;
+      locks[t.deskId] = locks[t.deskId] || {};
+      locks[t.deskId][t.slot] = true;
+      lockCount++;
+    });
+
+    const createdAt = scClasses[classId] && scClasses[classId].createdAt ? scClasses[classId].createdAt : Date.now();
+    updates[`${root}/classes/${classId}`] = { name, createdAt };
+    updates[`${root}/rosters/${classId}`] = Object.keys(roster).length ? roster : null;
+    updates[`${root}/layouts/${classId}`] = layout;
+    updates[`${root}/seating/${classId}`] = seated ? seating : null;
+    updates[`${root}/locks/${classId}`] = lockCount ? locks : null;
+
+    lines.push(`<b>${escapeHtml(name)}</b>: ${Object.keys(roster).length} students, ${seated} seated, ${lockCount} locked seat${lockCount===1?'':'s'}` + (skipped ? ` (${skipped} seat${skipped===1?'':'s'} pointed at a deleted student and were skipped)` : ''));
+  }
+
+  if(document.getElementById('saveTemplate').checked){
+    updates[`${root}/layoutTemplates/tmpl_bleachers`] = { name: 'Bleachers', desks: layout };
+  }
+
+  const btn = document.getElementById('migrateBtn');
+  btn.disabled = true;
+  log.textContent = 'Moving…';
+  try{
+    await scDb.ref().update(updates);
+    // Read back to confirm the class landed.
+    const verify = await Promise.all(picked.map(id => scDb.ref(`${root}/rosters/class_bl_${id}`).once('value')));
+    const counts = verify.map(s => Object.keys(s.val() || {}).length);
+    log.innerHTML = '<span class="ok">✓ Done.</span><br>' + lines.join('<br>') +
+      `<br><span style="color:var(--muted)">Confirmed in Seating Chart Maker: ${counts.join(', ')} student${counts.length>1?' counts':'s'}.` +
+      (document.getElementById('saveTemplate').checked ? ' “Bleachers” saved layout added.' : '') +
+      ' Open Seating Chart Maker and pick the new class from the Class dropdown.</span>';
+    picked.forEach(id=>{
+      scClasses['class_bl_' + id] = { name: document.getElementById('name_' + id).value.trim() };
+    });
+  }catch(e){
+    log.innerHTML = `<span class="err">Move failed: ${escapeHtml(e.message)}</span><br>Nothing was partially written; a Firebase multi-path update either all lands or none of it does.`;
+  }finally{
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
