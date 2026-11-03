@@ -177,6 +177,11 @@
     text-transform:uppercase;
     letter-spacing:.03em;
   }
+  .toolbar .note{
+    font-size:11px;
+    color:var(--muted);
+    line-height:1.4;
+  }
   #panelToggle{
     font-size:16px;
     padding:8px 10px;
@@ -303,6 +308,29 @@
     z-index:50;
   }
 
+  /* ---------------- Teacher desk marker ----------------
+     Marks where the teacher's desk really is. The Near teacher rule
+     measures from this box. Draggable in Edit Layout mode. */
+  .teacherDesk{
+    position:absolute;
+    width:150px;
+    height:64px;
+    background:#efe4d1;
+    border:2px solid #8a6d45;
+    border-radius:8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:12px;
+    font-weight:800;
+    color:#5b4526;
+    letter-spacing:.04em;
+    user-select:none;
+    z-index:2;
+  }
+  .teacherDesk.movable{ cursor:grab; box-shadow:0 0 0 3px rgba(138,109,69,.25); }
+  .teacherDesk.dragging{ opacity:.6; cursor:grabbing; }
+
   /* ---------------- Square seats ----------------
      Top 3/4: the student's name. Bottom 1/4: a toolbar with the editing
      buttons (only shown in Edit Students mode). The seat stays the same
@@ -421,6 +449,29 @@
     box-shadow:0 1px 3px rgba(0,0,0,.25);
     z-index:3;
   }
+  /* Front row / Near teacher marks — Edit Students mode only, never printed */
+  .needsBadges{
+    position:absolute;
+    top:-9px;
+    left:50%;
+    transform:translateX(-50%);
+    display:flex;
+    gap:3px;
+    z-index:3;
+    pointer-events:none;
+  }
+  .needsBadges span{
+    font-family:'Montserrat',sans-serif;
+    font-size:9px;
+    font-weight:800;
+    line-height:15px;
+    padding:0 5px;
+    border-radius:8px;
+    background:#374151;
+    color:#fff;
+    white-space:nowrap;
+    box-shadow:0 1px 2px rgba(0,0,0,.25);
+  }
   .desk.single{
     padding:0;
     border:none;
@@ -445,7 +496,6 @@
     pointer-events:none;
     z-index:2;
   }
-  #room.printing .seatTools{display:none;}
   /* ---------------- Table toolbar (Edit Layout mode) ----------------
      Same idea as the seat toolbar: a strip across the bottom quarter of the
      table, spanning every seat at that table. Seats keep their square size;
@@ -485,35 +535,6 @@
   .deskTools button:focus-visible{ outline:2px solid #2563eb; outline-offset:-2px; }
   .deskTools button svg{ width:15px; height:15px; fill:currentColor; flex:none; }
   .deskTools button.removeDeskBtn:hover{ background:var(--red); color:#fff; }
-  /* PDF export: locked and keep-apart seats print exactly like every other
-     seat — gender shading kept, no gold, no red. */
-  #room.printing .seat.locked,
-  #room.printing .seat.conflictWarn{
-    border-color:var(--dark-gray-border) !important;
-    background:#fff !important;
-    color:#111827 !important;
-    box-shadow:none !important;
-  }
-  #room.printing .seat.filled.male{
-    background:var(--boy-bg) !important;
-    border-color:var(--boy-border) !important;
-  }
-  #room.printing .seat.filled.female{
-    background:var(--girl-bg) !important;
-    border-color:var(--girl-border) !important;
-  }
-  #room.printing .conflictIcon{display:none;}
-  #room.printing .deskTools{display:none;}
-  #room.printing .desk.layoutTools .seat{padding-bottom:0;}
-  #room.printing .seat{cursor:default;}
-  #room.printing .seat{
-    font-size:15px;
-    font-weight:800;
-  }
-  #room.printing .seat.empty .seatName{
-    font-size:13px;
-    font-weight:600;
-  }
   .desk{position:absolute;}
   .deskInner{position:relative;display:flex;gap:4px;}
   #sidebar{
@@ -611,7 +632,7 @@
   .modal input{width:100%;margin-bottom:12px;}
   .modal .btnRow{display:flex;justify-content:flex-end;gap:8px;}
   .helpModal{
-    width:600px;
+    width:640px;
     max-width:90vw;
     max-height:80vh;
     overflow-y:auto;
@@ -688,6 +709,41 @@
     cursor:pointer;
   }
   #kaStudentPicker input{width:auto;margin:0;}
+
+  /* Front row / Near teacher picker */
+  #needsList{
+    border:1px solid var(--border);
+    border-radius:8px;
+    max-height:320px;
+    overflow-y:auto;
+    margin-bottom:12px;
+  }
+  .needsRow{
+    display:grid;
+    grid-template-columns:1fr 84px 96px;
+    align-items:center;
+    gap:6px;
+    padding:6px 10px;
+    font-size:13px;
+    font-weight:600;
+    border-bottom:1px solid var(--border);
+  }
+  .needsRow:last-child{ border-bottom:none; }
+  .needsRow.head{
+    position:sticky;
+    top:0;
+    background:#fafafa;
+    font-size:11px;
+    font-weight:700;
+    color:var(--muted);
+  }
+  .needsRow label{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+  }
+  .needsRow input{ width:18px; height:18px; margin:0; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -750,6 +806,15 @@
     <button id="doneBtn" onclick="setViewMode('clean')" style="display:none;">✅ Done</button>
   </div>
 
+  <div class="group" data-mode="always">
+    <label>Saved Seating Charts</label>
+    <select id="chartSelect"><option value="">-- choose a saved chart --</option></select>
+    <button onclick="restoreChart()">Restore</button>
+    <button class="secondary" onclick="saveCurrentChart()">💾 Save Current Chart...</button>
+    <button class="secondary" onclick="deleteChart()">Delete</button>
+    <span class="note">Saves tables <i>and</i> who sits where. Charts marked ⏱ were saved automatically before a layout change.</span>
+  </div>
+
   <div class="group" data-mode="layout">
     <label>Saved Layout</label>
     <select id="templateSelect"><option value="">-- choose template --</option></select>
@@ -790,15 +855,21 @@
     <label style="display:flex;align-items:center;gap:4px;font-weight:600;">
       <input type="checkbox" id="alternateGenderToggle" style="width:auto;" checked> Alternate gender
     </label>
+    <label style="display:flex;align-items:center;gap:4px;font-weight:600;">
+      <input type="checkbox" id="avoidRecentToggle" style="width:auto;" checked onchange="saveAvoidRecent()"> Avoid recent neighbors
+    </label>
+    <button class="secondary" onclick="fixRuleBreaks()">🔧 Fix Rule Breaks</button>
     <button class="secondary" onclick="clearSeats()">Clear Seats</button>
     <button class="secondary" onclick="clearAllLocks()">🔓 Clear All Locks</button>
   </div>
-<div class="group" data-mode="students">
+  <div class="group" data-mode="students">
+    <label>Seating Rules</label>
     <button class="secondary" onclick="openKeepAwayModal()">Keep-Apart Groups</button>
+    <button class="secondary" onclick="openNeedsModal()">🎯 Front Row &amp; Near Teacher</button>
   </div>
   <div class="group" data-mode="students">
     <button class="secondary" onclick="window.open('https://ericloveday.github.io/seating-chart-maker/kagan-team-importer.html','_blank')">Kagan Group Import</button>
-    <span style="font-size:11px;color:var(--muted);">Opens a separate tool (same sign-in) that ranks students by score and auto-seats balanced Kagan groups into this class's existing table layout.</span>
+    <span class="note">Opens a separate tool (same sign-in) that ranks students by score and auto-seats balanced Kagan groups into this class's existing table layout.</span>
   </div>
 
   <div class="group" data-mode="always">
@@ -818,7 +889,7 @@
     <button class="secondary" onclick="document.getElementById('csvInput').click()">Upload CSV</button>
     <button class="secondary" onclick="clearRoster()">Clear Roster</button>
     <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="handleCSV(event)">
-    <span style="font-size:11px;color:var(--muted);">Format: Last, First, Gender(M/F) — one student per line. A header row is fine, it's skipped automatically. Uploading adds to the current roster — click Clear Roster first to fully replace it.</span>
+    <span class="note">Format: Last, First, Gender(M/F) — one student per line. A header row is fine, it's skipped automatically. Uploading adds to the current roster — click Clear Roster first to fully replace it.</span>
   </div>
 
   <div class="group" data-mode="always">
@@ -856,7 +927,7 @@
 <div class="modalBg" id="newClassModal">
   <div class="modal">
     <h3>New Class / Period</h3>
-    <input type="text" id="newClassName" placeholder="e.g. Period 3 - Science">
+    <input type="text" id="newClassName" placeholder="e.g. Core 3 - Science">
     <div class="btnRow">
       <button class="secondary" onclick="closeNewClassModal()">Cancel</button>
       <button onclick="createNewClass()">Create</button>
@@ -886,74 +957,81 @@
     <h3 style="color:var(--text);font-size:18px;">How This App Works</h3>
 
     <h3>Classes</h3>
-    <p>Create one entry per period (New Class). Each class has its own roster, desks, seating, and locks — switching the Class dropdown swaps everything at once. <b>Rename Class</b> lets you change a class's name anytime without touching its roster, layout, or seating. Set your <b>Teacher Name</b> once in the toolbar — it's saved automatically and appears on every printed PDF. <b>Delete Class</b> removes the selected class entirely, including its roster, desks, seating, and locks — this can't be undone.</p>
+    <p>Create one entry per Core with <b>+ New Class</b>. Each class has its own roster, tables, seating, locks, rules, and saved charts — switching the Class dropdown swaps everything at once. <b>Rename Class</b> changes the name without touching anything else. Set your <b>Teacher Name</b> once at the top of the toolbar; it's saved automatically and appears on every PDF. <b>Delete Class</b> removes the class and everything in it, and can't be undone.</p>
+
+    <h3>Three views</h3>
+    <ul>
+      <li><b>Clean View</b> (the default, and what ✅ Done returns you to) — a tidy, read-only look at the chart.</li>
+      <li><b>📐 Edit Layout</b> — the table tools: Saved Layout, Quick Grid, Select Tables / Duplicate. Every table can be dragged, and each one shows a toolbar strip along its bottom.</li>
+      <li><b>🧑‍🤝‍🧑 Edit Students</b> — the student tools: Shuffle, Seating Rules, Kagan Group Import, and Roster. Tables stay put, each seat shows its own toolbar strip, and you can drag students from Unassigned onto open seats.</li>
+    </ul>
+    <p>Saved Seating Charts, Seat Numbers, Export/Print PDF, Seat Roster Report, and this Cheat Sheet are available in every view.</p>
+
+    <h3>Saved Seating Charts</h3>
+    <p>A saved chart is a snapshot of the whole room: the tables, who sits where, which seats are locked, and where the Teacher Desk is. Use it when you switch between arrangements — say, lab groups normally and rows for testing.</p>
+    <ul>
+      <li><b>💾 Save Current Chart...</b> asks for a name (like "Lab groups") and saves the room exactly as it is.</li>
+      <li><b>Restore</b> puts the chosen chart back. Your current room is auto-saved first, so restoring never loses anything. Students added since the chart was saved land in Unassigned; students removed from the roster are skipped.</li>
+      <li><b>Automatic saves (⏱):</b> before Quick Grid, applying a Saved Layout, Clear Layout, or a Restore replaces your tables, the app saves the current chart for you. The 10 most recent automatic saves per class are kept.</li>
+      <li><b>Delete</b> removes a saved chart. It doesn't change the room you're looking at.</li>
+    </ul>
+    <div class="tip">
+      <b>Switching to rows for a test:</b> 💾 save your groups chart (or just let the ⏱ auto-save catch it), build or apply your rows, and when testing is over, pick the groups chart and click <b>Restore</b>.
+    </div>
+    <p><b>Saved Layout</b> (in Edit Layout mode) is different: it saves only the tables, so you can reuse the same arrangement in any class. Applying one clears that class's seating.</p>
 
     <h3>Adding students</h3>
     <ul>
-      <li>Type a name and pick M/F/- (or leave blank), then click <b>+ Add Student</b> (or press Enter in the name field).</li>
-      <li><b>CSV upload format:</b> <code>Last, First, Gender(M/F)</code> — one student per line. A header row (like "Last Name, First Name, Gender") is detected and skipped automatically. The <b>Roster</b> section (Upload CSV / Clear Roster) is near the bottom of the toolbar in Edit Students mode.</li>
-      <li>Click the <b>(M)/(F)/(-)</b> badge on any unassigned student's chip to change their gender anytime.</li>
-      <li>Click a student's <b>name</b> (in the Unassigned list or in a seat) to rename them — renaming doesn't move or unseat them.</li>
-      <li><b>Clear Roster</b> removes every student from the current class at once (and clears seating too) — handy before uploading a whole new roster, since CSV upload only <i>adds</i> students rather than replacing the list.</li>
-      <li><b>🧩 Kagan Group Importer</b> (just below Shuffle in Edit Students mode): opens a separate companion tool in a new tab, signed in with the same account. Give it a CSV of names + test scores and it ranks students, snake-drafts them into balanced 4-person Kagan teams, and seats them directly into this class's existing pod layout — including an H/HM/LM/L role check and a visual map for confirming which desks form each pod before anything is written.</li>
+      <li>Type a name, pick M/F/- (or leave it blank), then click <b>+ Add Student</b> or press Enter.</li>
+      <li><b>Upload CSV</b> (Roster section, Edit Students mode): <code>Last, First, Gender(M/F)</code>, one student per line. A header row is detected and skipped. Uploading <i>adds</i> students — click <b>Clear Roster</b> first to replace the list.</li>
+      <li>Click the <b>(M)/(F)/(-)</b> badge on an unassigned student to change their gender.</li>
+      <li>Click a student's <b>name</b> (in Unassigned, or on a seat in Edit Students mode) to rename them. Renaming doesn't move them.</li>
+      <li><b>Kagan Group Import</b> opens a companion tool in a new tab with the same sign-in. Give it names and test scores, and it builds balanced 4-person Kagan teams and seats them into this class's existing pods.</li>
     </ul>
 
-    <h3>Keep Apart groups</h3>
-    <p>Use <b>🚫 Manage Keep-Apart Groups</b> (in Edit Students mode) to mark students who should never end up at the same table or right next to each other — the same idea as the bathroom checkout's conflict groups, applied to seating. Check 2 or more students and click Create Group; you can make as many separate groups as you need. <b>📌 Place Students</b> automatically avoids seating anyone next to a fellow group member whenever it's possible to do so. A manual drag-and-drop can still create one on purpose (for a supervised exception, say) — if it does, that seat gets a red outline and a ⚠️ icon so it's easy to spot before class. Groups are per-class, since rosters are per-class.</p>
-
-    <h3>Three Views</h3>
-    <p>The room has three modes, switched at the top of the toolbar:</p>
+    <h3>Seating rules</h3>
     <ul>
-      <li><b>👁 Clean View</b> (the default) — a tidy, read-only look at the chart. No icons, no dragging — great for just glancing at the layout or before printing.</li>
-      <li><b>📐 Edit Layout</b> — shows only the table-editing tools (Quick Grid, + Add Desk, Saved Layouts, Select Tables/Duplicate). Every table is freely draggable in this mode, and each table shows its toolbar strip along the bottom (rotate, seats, remove).</li>
-      <li><b>🧑‍🤝‍🧑 Edit Students</b> — shows only the student tools (Keep Apart, Place Students/Order, Clear Seats, Kagan Importer, Roster). Tables are fixed in place, each seat shows its toolbar strip along the bottom, and you can drag students from Unassigned onto open seats.</li>
+      <li><b>Keep-Apart Groups</b> — check 2 or more students who should never share a table or sit at touching tables. Make as many groups as you need.</li>
+      <li><b>🎯 Front Row &amp; Near Teacher</b> — check off students who need the front row, need to be near your desk, or both. <b>Front row</b> means the row of seats closest to the bottom of the chart (the front of the room). <b>Near teacher</b> means within about two seats of the <b>Teacher Desk</b> box. Drag that box in Edit Layout mode to where your desk really is.</li>
+      <li>Students with front-row or near-teacher needs show a small dark label (<b>FRONT</b> / <b>NEAR T</b>) on their seat in Edit Students mode only. It never prints, so IEP/504 needs stay private.</li>
+      <li>When a rule is broken — a keep-apart pair sitting together, or a student away from the front or the teacher — that seat gets a red outline and a ⚠️ in the corner. Hover the ⚠️ to see which rule.</li>
     </ul>
 
-    <h3>Building desks (Edit Layout mode)</h3>
+    <h3>Shuffling and fixing (Edit Students mode)</h3>
     <ul>
-      <li><b>Quick Grid:</b> pick rows × columns and seats-per-desk (1 = individual desks, 2 = lab tables), then Generate. This replaces the current layout and clears seating — but never touches your roster, so switching a class from Rows to Groups (or vice versa) is just Generate with new settings.</li>
-      <li><b>Clear Layout</b> removes every table from the class at once (students return to Unassigned, roster stays intact) — handy when you want to build a custom arrangement from scratch with + Add Desk instead of using Quick Grid.</li>
-      <li><b>+ Add Desk:</b> adds one single desk, draggable immediately.</li>
-      <li><b>Table toolbar:</b> in Edit Layout mode, the bottom quarter of every table is a toolbar with three buttons, left to right: rotate, seats, and remove.</li>
-      <li>The <b>seats</b> button (chair icon with a number) changes how many seats that table has, 1–6. Students in seats that get removed return to Unassigned.</li>
-      <li>The <b>×</b> removes that table (any seated student returns to Unassigned).</li>
-      <li>The <b>rotate</b> button (↻) turns a table 90° at a time — the whole table, seats, names, and icons all rotate together, so text stays aligned with whichever way the table is facing. Rotating can shift the table slightly (it turns around its center) — just drag it back into place afterward if needed.</li>
-      <li><b>Select Tables: On</b> lets you click tables to select them (blue outline). Drag any selected table and the whole selected group moves together, keeping their arrangement. <b>Duplicate Selected</b> clones the whole selected group — same layout, same rotations — placed just to the right, and auto-selects the copies so you can keep duplicating to build a row of matching groups fast. <b>Clear Selection</b> deselects everything.</li>
-      <li>While dragging any table, a thin blue guide line appears whenever an edge or center lines up with another table — and the table snaps right into place, just like Canva or PowerPoint.</li>
-      <li><b>↔ Spread Out for Square Seats:</b> seats are now bigger squares, so layouts built before that change can have overlapping tables. Click this once per class (and once after applying an older saved layout) to spread every table out proportionally. Seating and locks stay exactly as they were. Rotated tables may need a small nudge afterward.</li>
+      <li><b>📌 Place Students</b> fills every unlocked seat with the unlocked students. Front-row and near-teacher students are seated first, then everyone else fills in from the front of the room to the back, steering around keep-apart groups. If the room is too tight to follow every rule, it tells you how many seats were affected.</li>
+      <li><b>Order</b>: Random (default), or Alphabetical by first or last name.</li>
+      <li><b>Alternate gender</b> interleaves boys and girls. Random order only.</li>
+      <li><b>Avoid recent neighbors</b> remembers who sat next to whom in your last 3 charts and tries not to seat them together again. Random order only. Each time you click Place Students, the chart you're replacing — including any changes you dragged in by hand — is added to that memory.</li>
+      <li><b>🔧 Fix Rule Breaks</b> leaves your chart alone except for the students breaking a rule. It makes the smallest swaps it can to fix them and tells you how many students moved. Locked students are never moved. If something can't be fixed (say, more front-row students than front seats), it tells you what's left.</li>
+      <li><b>Clear Seats</b> sends everyone in an unlocked seat back to Unassigned. Locked students stay put.</li>
     </ul>
 
-    <h3>Saved Layouts (Rows / Groups / etc.)</h3>
-    <p>Build a layout once, then <b>Save Current As...</b> and name it (e.g. "Rows" or "Lab Tables"). Later, pick it from the Saved Layout dropdown and click <b>Apply</b> to drop that same layout into any of your classes. Applying a layout clears current seating for that class. Pick a layout and click <b>Delete</b> to remove it from the list permanently — this only deletes the saved template, not any class currently using that arrangement. Your saved layouts are private to your account, just like your classes.</p>
-
-    <h3>Seating students (Edit Students mode)</h3>
+    <h3>Seat toolbar (Edit Students mode)</h3>
+    <p>Each seat is a square: the top three quarters show the name, and the bottom quarter is a toolbar.</p>
     <ul>
-      <li>Drag a student chip from Unassigned onto any open seat.</li>
-      <li><b>📌 Place Students:</b> fills every unlocked seat with unlocked students, using whatever's chosen in the <b>Order</b> dropdown, starting from the front row (bottom of the layout) and working back, and steering around Keep Apart conflicts wherever it can.</li>
-      <li><b>Order</b> dropdown controls how students get placed: Random (default), or Alphabetical by first/last name — great for a simple, predictable seating chart instead of a shuffle.</li>
-      <li><b>Alternate gender</b> checkbox: interleaves boy/girl in seat order instead of pure random. Only applies when Order is set to Random.</li>
-      <li><b>Clear Seats:</b> sends everyone in an unlocked seat back to Unassigned. Locked seats and the students in them stay put, and their locks are kept. To clear everyone, use 🔓 Clear All Locks first. Desks are never touched.</li>
+      <li><b>🔒 / 🔓</b> (left) locks or unlocks the seat, filled or empty. Locked seats turn gold.</li>
+      <li><b>Undo arrow</b> (right, filled and unlocked seats only) sends that student back to Unassigned — handy when drag-and-drop is fussy on a Chromebook touchscreen.</li>
+      <li><b>🔓 Clear All Locks</b> unlocks every seat in the class without moving anyone.</li>
     </ul>
-
-    <h3>Seat toolbar (visible in Edit Students mode)</h3>
-    <p>Every seat is a square. The top three quarters show the student's name; the bottom quarter is a small toolbar with that seat's buttons:</p>
-    <ul>
-      <li><b>🔒 / 🔓</b> (left side of the toolbar, on every seat, filled or empty): click to lock/unlock that seat. Locked seats — whether occupied or empty — turn gold, are skipped by Place Students/Reshuffle, and are protected from drag-and-drop, so you can reserve an empty seat too, not just protect a seated student.</li>
-      <li>The <b>undo arrow</b> (right side of the toolbar, on filled, unlocked seats): instantly sends that student back to Unassigned — use this if drag-and-drop isn't working well on your device (common on touchscreens/Chromebooks).</li>
-      <li><b>🔓 Clear All Locks</b> (in Edit Students mode): unlocks every seat in the current class at once, without touching who's seated. Handy if locks ever get "stuck" on empty seats — for example, if <b>Clear Roster</b> is used to wipe students during a roster change, any seats that were locked will be released automatically as of the current version, but this button is here as a quick fix/reset if you ever end up with locked-but-empty seats.</li>
-      <li><b>⚠️</b> (top-right corner of a seat): appears when that seat's occupant is sitting near another student from the same Keep Apart group. Purely informational — it won't block or move anyone, it's just a flag so you notice before class starts.</li>
-    </ul>
-    <p>The toolbar never prints — exported PDFs show just the names.</p>
-
-    <p><b>Locked means locked.</b> A locked student never loses their seat until you unlock it. Place Students and Clear Seats skip them, and any layout change that would delete their seat (Quick Grid, applying a saved layout, Clear Layout, removing their table, or shrinking its seat count) is stopped with a message listing who's in the way. Moving or rotating a table is fine — they ride along with it.</p>
-
+    <p><b>Locked means locked.</b> A locked student never moves until you unlock them. Place Students, Fix Rule Breaks, and Clear Seats all skip them, and any layout change that would remove their seat (Quick Grid, applying a Saved Layout, Clear Layout, removing their table, or shrinking its seat count) is stopped with a message listing who's in the way. Restoring a saved chart asks you first, then unlocks them and uses that chart's seats and locks instead. Moving or rotating a table is fine — the student rides along with it.</p>
     <div class="tip">
-      <b>IEP / 504 seating:</b> place the student in the seat they need, click 🔒 to lock it, then hit 📌 Place Students as usual — everyone else fills in around them, and they'll stay locked in for future placements too. Locked students are also excluded from the "Alternate gender" calculation, so they won't throw off the balance.
+      <b>IEP / 504 seating:</b> check the student's need in 🎯 Front Row &amp; Near Teacher and let Place Students handle it, or put them in the exact seat they need and click 🔒. Everyone else fills in around them.
     </div>
 
+    <h3>Building tables (Edit Layout mode)</h3>
+    <ul>
+      <li><b>Quick Grid:</b> choose rows × columns and seats per desk (1 = single desks, 2 = lab tables), then Generate. This replaces the tables and clears seating, but never touches the roster. The old chart is auto-saved first.</li>
+      <li><b>+ Add Desk</b> adds one single desk. <b>Clear Layout</b> removes every table (students return to Unassigned).</li>
+      <li><b>Table toolbar</b> (bottom of each table), left to right: <b>rotate</b> 90°, <b>seats</b> (chair icon with the seat count, 1–6), and <b>×</b> to remove the table. Rotating turns the table around its center, so you may need to nudge it back into place.</li>
+      <li><b>Select Tables: On</b> lets you click tables to select them (blue outline). Drag one and the whole selection moves together. <b>Duplicate Selected</b> copies the selection just to the right and selects the copies, so you can keep duplicating. <b>Clear Selection</b> deselects.</li>
+      <li>While dragging, blue guide lines appear when edges or centers line up with another table, and the table snaps into place.</li>
+      <li><b>Teacher Desk</b> box: drag it to where your desk really is. The Near teacher rule measures from it.</li>
+    </ul>
+
     <h3>Exporting</h3>
-    <p>📄 Export PDF opens a small picker so you can choose Landscape, Portrait, or Auto (Best Fit) — Auto captures the current layout and automatically picks whichever page orientation prints it biggest for your specific layout. It adds the class name, your teacher name (if set), and the date/time as the header. The file name includes the date and time too, so it's easy to tell which export is the newest. Seats are shaded by gender (blue for boys, green for girls) both in the app and on the printout. Locked seats show a gold highlight in the app, but print exactly like every other seat, with their normal gender shading. Export PDF works from any of the three view modes.</p>
-    <p><b>🔢 Seat Numbers</b> (toolbar, always visible) puts a small numbered badge on the top-left corner of every seat, numbered top-to-bottom then left-to-right across the whole layout. This is the same numbering used on <b>🏷️ Desk Labels</b>, so "Seat 5" in the app and "Seat 5" on a printed label always mean the same physical seat — handy for matching a sticker to a desk. Desk Labels are formatted for real <b>Avery 58163</b> sheets (2" x 4" labels, 10 per sheet) and include the class name(s) for that seat plus the seat number.</p>
+    <p><b>Export/Print PDF</b> lets you choose Landscape, Portrait, or Auto (whichever prints your tables biggest). The PDF is cropped to your tables and scaled to fill the page, with the class name, your teacher name, and the date and time at the top. Seats are shaded by gender (blue for boys, green for girls). Locks, ⚠️ warnings, Front/Near-teacher labels, toolbars, and the Teacher Desk box don't print. If <b>🔢 Seat Numbers</b> is on, the seat numbers print too.</p>
+    <p><b>🔢 Seat Numbers</b> numbers every seat top-to-bottom, then left-to-right. The <b>🖨️ Seat Roster Report</b> uses the same numbers: pick the classes that share a layout (e.g. Core 1–4) for a table with one row per seat and a column per class, or print <b>🏷️ Desk Labels</b> on Avery 58163 sheets (2" × 4", 10 per sheet) showing each seat number and who sits there in each class.</p>
 
     <div class="btnRow">
       <button onclick="closeHelpModal()">Got it</button>
@@ -990,6 +1068,19 @@
     <div class="btnRow" style="justify-content:space-between;">
       <button class="secondary" onclick="closeKeepAwayModal()">Close</button>
       <button onclick="createKeepAwayGroup()">+ Create Group</button>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="needsModal">
+  <div class="modal keepAwayModal">
+    <h3>Front Row &amp; Near Teacher</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px 0;line-height:1.5;">
+      Check what each student needs. <b>📌 Place Students</b> seats these students first, and <b>🔧 Fix Rule Breaks</b> moves them back if they end up in the wrong spot. <b>Front row</b> is the row of seats closest to the bottom of the chart. <b>Near teacher</b> is within about two seats of the Teacher Desk box, which you can drag in Edit Layout mode. These marks show only in Edit Students mode and never print.
+    </p>
+    <div id="needsList"></div>
+    <div class="btnRow">
+      <button onclick="closeNeedsModal()">Done</button>
     </div>
   </div>
 </div>
@@ -1167,6 +1258,9 @@ let seating = {};
 let locks = {};
 let templates = {};
 let keepAwayGroups = {};
+let roomMarkers = {};      // { teacher: {x, y} } for the current class
+let savedCharts = {};      // { chartId: {name, savedAt, auto, layout, seating, locks, teacher} }
+let historyEntries = [];   // last few charts' neighbor pairs, oldest first: [[ "a|b", ... ], ...]
 let viewMode = 'clean';
 let selectMode = false;
 let selectedDeskIds = new Set();
@@ -1187,9 +1281,17 @@ function deskSize(capacity){
     h: SEAT_PX + DESK_PAD * 2 + DESK_BORDER * 2
   };
 }
-// Old (pre-square) desk footprint, used only by the one-time spread-out tool:
-// seats were 80px wide x ~62px tall per desk.
-const OLD_SEAT_W = 80, OLD_DESK_H = 62;
+
+// Teacher desk marker size (must match .teacherDesk in the CSS) and how
+// close a seat has to be to count as "near the teacher": a seat's center
+// within this many pixels of the box's nearest edge (~2 seats).
+const TEACHER_W = 150, TEACHER_H = 64, NEAR_TEACHER_PX = 230;
+
+// Shuffle history: how many past charts to remember, and how far apart two
+// desks can be and still count as neighbors (wider than keep-apart's buffer,
+// so the desk beside you in a row of singles counts too).
+const HISTORY_KEEP = 3, RECENT_NEAR_BUFFER = 50;
+const AUTO_SAVE_LIMIT = 10;
 
 function loadTeacherName(){
   try{
@@ -1226,9 +1328,18 @@ function saveTeacherNameWithStatus(){
   setStatus('Teacher name saved');
 }
 
+function loadAvoidRecent(){
+  try{
+    const v = localStorage.getItem('scm_avoidRecent');
+    if(v !== null) document.getElementById('avoidRecentToggle').checked = v === '1';
+  }catch(e){}
+}
+function saveAvoidRecent(){
+  try{ localStorage.setItem('scm_avoidRecent', document.getElementById('avoidRecentToggle').checked ? '1' : '0'); }catch(e){}
+}
+
 function togglePanel(){
   const panel = document.querySelector('.toolbar');
-  const btn = document.getElementById('panelToggle');
   const collapsed = panel.classList.toggle('collapsed');
   try{ localStorage.setItem('scm_panelCollapsed', collapsed ? '1' : '0'); }catch(e){}
 }
@@ -1237,7 +1348,6 @@ function applyStoredPanelState(){
   let collapsed = false;
   try{ collapsed = localStorage.getItem('scm_panelCollapsed') === '1'; }catch(e){}
   const panel = document.querySelector('.toolbar');
-  const btn = document.getElementById('panelToggle');
   if(collapsed){
     panel.classList.add('collapsed');
   }
@@ -1287,6 +1397,10 @@ document.getElementById('classSelect').addEventListener('change', (e)=>{
 function selectClass(id){
   currentClassId = id || null;
   if(!currentClassId){
+    detachClassListeners();
+    roster = {}; layout = {}; seating = {}; locks = {}; keepAwayGroups = {};
+    roomMarkers = {}; savedCharts = {}; historyEntries = [];
+    renderSavedChartList();
     document.getElementById('roomTitle').textContent = "No class selected";
     document.getElementById('room').innerHTML = "";
     document.getElementById('unassignedList').innerHTML = "";
@@ -1298,26 +1412,34 @@ function selectClass(id){
   attachClassListeners();
 }
 
+// Listeners for the selected class. The previous class's listeners are
+// switched off first, so a change to an old class can never overwrite what
+// you're looking at.
+let classRefs = [];
+function detachClassListeners(){
+  classRefs.forEach(r => r.off());
+  classRefs = [];
+}
+function listen(path, cb){
+  const ref = db.ref(path);
+  ref.on('value', cb);
+  classRefs.push(ref);
+}
+
 function attachClassListeners(){
-  db.ref(`${ROOT}/rosters/${currentClassId}`).on('value', snap=>{
-    roster = snap.val() || {};
-    render();
-  });
-  db.ref(`${ROOT}/layouts/${currentClassId}`).on('value', snap=>{
-    layout = snap.val() || {};
-    render();
-  });
-  db.ref(`${ROOT}/seating/${currentClassId}`).on('value', snap=>{
-    seating = snap.val() || {};
-    render();
-  });
-  db.ref(`${ROOT}/locks/${currentClassId}`).on('value', snap=>{
-    locks = snap.val() || {};
-    render();
-  });
-  db.ref(`${ROOT}/keepAway/${currentClassId}`).on('value', snap=>{
-    keepAwayGroups = snap.val() || {};
-    render();
+  detachClassListeners();
+  const cid = currentClassId;
+  listen(`${ROOT}/rosters/${cid}`, snap=>{ roster = snap.val() || {}; render(); });
+  listen(`${ROOT}/layouts/${cid}`, snap=>{ layout = snap.val() || {}; render(); });
+  listen(`${ROOT}/seating/${cid}`, snap=>{ seating = snap.val() || {}; render(); });
+  listen(`${ROOT}/locks/${cid}`, snap=>{ locks = snap.val() || {}; render(); });
+  listen(`${ROOT}/keepAway/${cid}`, snap=>{ keepAwayGroups = snap.val() || {}; render(); });
+  listen(`${ROOT}/roomMarkers/${cid}`, snap=>{ roomMarkers = snap.val() || {}; render(); });
+  listen(`${ROOT}/savedCharts/${cid}`, snap=>{ savedCharts = snap.val() || {}; renderSavedChartList(); });
+  listen(`${ROOT}/history/${cid}`, snap=>{
+    const val = snap.val();
+    const list = val ? (Array.isArray(val) ? val : Object.values(val)) : [];
+    historyEntries = list.filter(Boolean).map(e => Array.isArray(e) ? e : Object.values(e));
   });
 }
 
@@ -1329,14 +1451,137 @@ function closeNewClassModal(){ document.getElementById('newClassModal').classLis
 function openHelpModal(){ document.getElementById('helpModal').classList.add('show'); }
 function closeHelpModal(){ document.getElementById('helpModal').classList.remove('show'); }
 
+/* ====== SAVED SEATING CHARTS ======
+   A snapshot of the whole room for one class: tables, who sits where,
+   locks, and the teacher desk marker. Stored under
+   ${ROOT}/savedCharts/${classId}/${chartId}. Saved by hand, or
+   automatically (auto: true) right before anything replaces the tables. */
+function hasAnySeated(){
+  return Object.values(seating).some(seats => Object.values(seats || {}).some(Boolean));
+}
+
+function saveChartSnapshot(name, auto){
+  if(!currentClassId) return Promise.resolve();
+  const cid = currentClassId;
+  const id = slugId('chart');
+  const data = {
+    name,
+    savedAt: Date.now(),
+    auto: !!auto,
+    layout: layout || {},
+    seating: seating || {},
+    locks: locks || {},
+    teacher: (roomMarkers && roomMarkers.teacher) || null
+  };
+  return db.ref(`${ROOT}/savedCharts/${cid}/${id}`).set(data).then(()=>{
+    if(auto) return pruneAutoSaves(cid);
+  });
+}
+
+function pruneAutoSaves(cid){
+  return db.ref(`${ROOT}/savedCharts/${cid}`).once('value').then(snap=>{
+    const all = snap.val() || {};
+    Object.entries(all)
+      .filter(([, c]) => c && c.auto)
+      .sort((a, b) => (b[1].savedAt || 0) - (a[1].savedAt || 0))
+      .slice(AUTO_SAVE_LIMIT)
+      .forEach(([id]) => db.ref(`${ROOT}/savedCharts/${cid}/${id}`).remove());
+  });
+}
+
+// Called right before anything replaces this class's tables.
+function autoSaveBefore(actionLabel){
+  if(Object.keys(layout).length === 0) return;
+  const stamp = new Date().toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+  saveChartSnapshot(`Before ${actionLabel} (${stamp})`, true);
+}
+
+function renderSavedChartList(){
+  const sel = document.getElementById('chartSelect');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">-- choose a saved chart --</option>';
+  Object.entries(savedCharts)
+    .filter(([, c]) => c)
+    .sort((a, b) => (b[1].savedAt || 0) - (a[1].savedAt || 0))
+    .forEach(([id, c])=>{
+      const opt = document.createElement('option');
+      opt.value = id;
+      const date = c.savedAt ? new Date(c.savedAt).toLocaleDateString(undefined, { month:'short', day:'numeric' }) : '';
+      opt.textContent = c.auto ? `⏱ ${c.name}` : `${c.name}${date ? ' · ' + date : ''}`;
+      sel.appendChild(opt);
+    });
+  if(savedCharts[prev]) sel.value = prev;
+}
+
+function saveCurrentChart(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  if(Object.keys(layout).length === 0){ alert('This class has no tables yet, so there\'s nothing to save.'); return; }
+  const name = prompt('Name this seating chart (e.g. "Lab groups" or "Test rows"):');
+  if(!name || !name.trim()) return;
+  saveChartSnapshot(name.trim(), false).then(()=> setStatus('Chart saved'));
+}
+
+function restoreChart(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  const id = document.getElementById('chartSelect').value;
+  if(!id){ alert('Choose a saved chart first.'); return; }
+  const chart = savedCharts[id];
+  if(!chart) return;
+
+  // Locked students move only with your say-so.
+  const lockedNames = lockedStudentsAt(Object.keys(layout));
+  const msg = lockedNames.length
+    ? `Restore "${chart.name}"?\n\n${lockedNames.length === 1 ? 'This student is' : 'These students are'} locked in the current chart:\n${lockedNames.join('\n')}\n\nRestoring will unlock them and use the saved chart's seats and locks instead. Your current chart is auto-saved first.`
+    : `Restore "${chart.name}"? This puts back its tables, seating, and locks. Your current chart is auto-saved first, so you can come back to it.`;
+  if(!confirm(msg)) return;
+
+  autoSaveBefore(`restoring "${chart.name}"`);
+
+  const newLayout = chart.layout || {};
+  const capOf = d => (newLayout[d] && newLayout[d].capacity) || 1;
+  const placed = new Set();
+  const newSeating = {};
+  Object.entries(chart.seating || {}).forEach(([d, seats])=>{
+    if(!newLayout[d]) return;
+    Object.entries(seats || {}).forEach(([slot, sid])=>{
+      // Skip students no longer on the roster; new students land in Unassigned.
+      if(!sid || !roster[sid] || placed.has(sid) || parseInt(slot) >= capOf(d)) return;
+      (newSeating[d] = newSeating[d] || {})[slot] = sid;
+      placed.add(sid);
+    });
+  });
+  const newLocks = {};
+  Object.entries(chart.locks || {}).forEach(([d, ls])=>{
+    if(!newLayout[d]) return;
+    Object.entries(ls || {}).forEach(([slot, v])=>{
+      if(v && parseInt(slot) < capOf(d)) (newLocks[d] = newLocks[d] || {})[slot] = true;
+    });
+  });
+
+  const cid = currentClassId;
+  const updates = {};
+  updates[`${ROOT}/layouts/${cid}`] = newLayout;
+  updates[`${ROOT}/seating/${cid}`] = newSeating;
+  updates[`${ROOT}/locks/${cid}`] = newLocks;
+  updates[`${ROOT}/roomMarkers/${cid}/teacher`] = chart.teacher || null;
+  db.ref().update(updates).then(()=> setStatus('Chart restored'));
+}
+
+function deleteChart(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  const id = document.getElementById('chartSelect').value;
+  if(!id){ alert('Choose a saved chart to delete first.'); return; }
+  const chart = savedCharts[id];
+  if(!chart) return;
+  if(!confirm(`Delete the saved chart "${chart.name}"? This can't be undone. (The room you're looking at won't change.)`)) return;
+  db.ref(`${ROOT}/savedCharts/${currentClassId}/${id}`).remove();
+  setStatus('Chart deleted');
+}
+
 /* ====== KEEP-APART GROUPS ======
    Per-class groups of student IDs (2+) who should never end up at the same
    desk or in a touching/adjacent desk. Stored as {groupId: {studentIds:[...]}}
-   under ${ROOT}/keepAway/${classId}. Enforced by randomizeAll() on a best-
-   effort basis (skips a candidate who'd conflict with an already-seated
-   near neighbor; falls back to placing them anyway if no conflict-free
-   candidate remains) and flagged visually by render() using the same
-   desk-adjacency check for anything placed manually. */
+   under ${ROOT}/keepAway/${classId}. */
 function openKeepAwayModal(){
   if(!currentClassId){ alert('Select a class first.'); return; }
   renderKeepAwayModal();
@@ -1366,7 +1611,7 @@ function renderKeepAwayModal(){
     del.textContent = 'Delete group';
     del.onclick = ()=>{
       if(!confirm('Delete this keep-apart group?')) return;
-      db.ref(`${ROOT}/keepAway/${currentClassId}/${groupId}`).remove();
+      db.ref(`${ROOT}/keepAway/${currentClassId}/${groupId}`).remove().then(renderKeepAwayModal);
     };
     card.appendChild(namesDiv);
     card.appendChild(del);
@@ -1395,8 +1640,7 @@ function createKeepAwayGroup(){
   const checked = Array.from(document.querySelectorAll('#kaStudentPicker input[type=checkbox]:checked')).map(cb=>cb.value);
   if(checked.length < 2){ alert('Check at least 2 students to form a keep-apart group.'); return; }
   const id = slugId('ka');
-  db.ref(`${ROOT}/keepAway/${currentClassId}/${id}`).set({studentIds: checked});
-  renderKeepAwayModal();
+  db.ref(`${ROOT}/keepAway/${currentClassId}/${id}`).set({studentIds: checked}).then(renderKeepAwayModal);
   setStatus('Keep-apart group created');
 }
 
@@ -1410,6 +1654,53 @@ function getConflictSet(studentId){
     }
   });
   return conflicts;
+}
+
+/* ====== FRONT ROW / NEAR TEACHER ======
+   Stored on each roster entry as front: true and/or nearTeacher: true. */
+function hasNeeds(stu){ return !!(stu && (stu.front || stu.nearTeacher)); }
+
+function openNeedsModal(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  renderNeedsModal();
+  document.getElementById('needsModal').classList.add('show');
+}
+function closeNeedsModal(){
+  document.getElementById('needsModal').classList.remove('show');
+}
+
+function renderNeedsModal(){
+  const list = document.getElementById('needsList');
+  list.innerHTML = '';
+  const entries = Object.entries(roster).sort((a,b)=> a[1].name.localeCompare(b[1].name, undefined, {sensitivity:'base'}));
+  if(entries.length === 0){
+    list.innerHTML = '<p style="font-size:12px;color:var(--muted);padding:10px;margin:0;">This class has no students yet.</p>';
+    return;
+  }
+  const head = document.createElement('div');
+  head.className = 'needsRow head';
+  head.innerHTML = '<span>Student</span><span style="text-align:center;">Front row</span><span style="text-align:center;">Near teacher</span>';
+  list.appendChild(head);
+
+  entries.forEach(([id, stu])=>{
+    const row = document.createElement('div');
+    row.className = 'needsRow';
+    const name = document.createElement('span');
+    name.textContent = stu.name;
+    row.appendChild(name);
+
+    [['front', 'Front row'], ['nearTeacher', 'Near teacher']].forEach(([field, label])=>{
+      const wrap = document.createElement('label');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!stu[field];
+      cb.setAttribute('aria-label', `${label}: ${stu.name}`);
+      cb.onchange = ()=> db.ref(`${ROOT}/rosters/${currentClassId}/${id}/${field}`).set(cb.checked ? true : null);
+      wrap.appendChild(cb);
+      row.appendChild(wrap);
+    });
+    list.appendChild(row);
+  });
 }
 
 // Desk geometry from deskSize() (same numbers generateGrid() uses),
@@ -1428,13 +1719,14 @@ function rectsNear(a, b, buffer){
   return !(a.right + buffer < b.left || b.right + buffer < a.left ||
            a.bottom + buffer < b.top || b.bottom + buffer < a.top);
 }
-function computeNearDeskGroups(layoutObj){
+function computeNearDeskGroups(layoutObj, buffer){
+  if(buffer === undefined) buffer = KA_NEAR_BUFFER;
   const ids = Object.keys(layoutObj);
   const near = {};
   ids.forEach(id => { near[id] = new Set([id]); }); // a desk is always "near" itself
   for(let i=0;i<ids.length;i++){
     for(let j=i+1;j<ids.length;j++){
-      if(rectsNear(deskRect(layoutObj[ids[i]]), deskRect(layoutObj[ids[j]]), KA_NEAR_BUFFER)){
+      if(rectsNear(deskRect(layoutObj[ids[i]]), deskRect(layoutObj[ids[j]]), buffer)){
         near[ids[i]].add(ids[j]);
         near[ids[j]].add(ids[i]);
       }
@@ -1443,17 +1735,125 @@ function computeNearDeskGroups(layoutObj){
   return near; // deskId -> Set of deskIds (including itself) considered "near"
 }
 
-// All student IDs currently seated in a desk considered "near" deskId (per nearDesks),
-// excluding the given slot itself.
-function studentsNearSlot(nearDesks, deskId, slot){
-  const result = [];
-  (nearDesks[deskId] || new Set([deskId])).forEach(nearDeskId=>{
-    const seats = seating[nearDeskId] || {};
-    Object.entries(seats).forEach(([slotIdx, sid])=>{
-      if(sid && !(nearDeskId === deskId && slotIdx == slot)) result.push(sid);
+// Students seated (in seatingObj) at any desk "near" deskId, not counting
+// the given seat itself.
+function occupantsNear(nearMap, seatingObj, deskId, slot){
+  const out = [];
+  (nearMap[deskId] || new Set([deskId])).forEach(otherDesk=>{
+    Object.entries(seatingObj[otherDesk] || {}).forEach(([sl, sid])=>{
+      if(sid && !(otherDesk === deskId && String(sl) === String(slot))) out.push(sid);
     });
   });
-  return result;
+  return out;
+}
+
+/* ====== RULE CONTEXT ======
+   Which seats count as front row and near the teacher, plus the keep-apart
+   neighbor map. Front of the room = bottom of the chart (same direction
+   Place Students already fills from). */
+function seatCenters(layoutObj){
+  const centers = {};
+  computePrintGeometry(layoutObj).desks.forEach(d=>{
+    d.seats.forEach(s=>{
+      centers[`${d.deskId}|${s.slot}`] = { x: s.x + SEAT_PX / 2, y: s.y + SEAT_PX / 2 };
+    });
+  });
+  return centers;
+}
+
+function defaultTeacherPos(){
+  if(Object.keys(layout).length === 0) return { x: 20, y: 20 };
+  const b = computePrintGeometry(layout).bounds;
+  return { x: Math.max(0, Math.round(b.x + b.w / 2 - TEACHER_W / 2)), y: Math.round(b.y + b.h + 40) };
+}
+function getTeacherPos(){
+  const t = roomMarkers && roomMarkers.teacher;
+  return (t && isFinite(t.x) && isFinite(t.y)) ? t : defaultTeacherPos();
+}
+
+function buildRuleContext(){
+  const centers = seatCenters(layout);
+  const keys = Object.keys(centers);
+  const front = new Set();
+  const nearT = new Set();
+  if(keys.length){
+    const maxY = Math.max(...keys.map(k => centers[k].y));
+    keys.forEach(k=>{ if(centers[k].y >= maxY - SEAT_PX * 0.75) front.add(k); });
+    const t = getTeacherPos();
+    keys.forEach(k=>{
+      const c = centers[k];
+      const dx = Math.max(t.x - c.x, 0, c.x - (t.x + TEACHER_W));
+      const dy = Math.max(t.y - c.y, 0, c.y - (t.y + TEACHER_H));
+      if(Math.hypot(dx, dy) <= NEAR_TEACHER_PX) nearT.add(k);
+    });
+  }
+  return { front, nearT, nearMap: computeNearDeskGroups(layout) };
+}
+
+// How many of this student's front/near-teacher needs a seat would miss.
+function unmetNeeds(sid, seatKey, ctx){
+  const stu = roster[sid];
+  if(!stu) return 0;
+  let n = 0;
+  if(stu.front && !ctx.front.has(seatKey)) n++;
+  if(stu.nearTeacher && !ctx.nearT.has(seatKey)) n++;
+  return n;
+}
+
+function cloneSeating(src){
+  const out = {};
+  Object.entries(src || {}).forEach(([d, seats])=>{
+    if(!layout[d]) return;
+    Object.entries(seats || {}).forEach(([s, sid])=>{
+      if(sid) (out[d] = out[d] || {})[String(s)] = sid;
+    });
+  });
+  return out;
+}
+
+// Total rule breaks in a seating arrangement: each keep-apart pair seated
+// near each other counts once, and each missed front/near-teacher need counts once.
+function countViolations(seatingObj, ctx){
+  let n = 0;
+  Object.entries(seatingObj).forEach(([d, seats])=>{
+    Object.entries(seats || {}).forEach(([slot, sid])=>{
+      if(!sid || !roster[sid]) return;
+      const conflicts = getConflictSet(sid);
+      if(conflicts.size){
+        occupantsNear(ctx.nearMap, seatingObj, d, slot).forEach(o=>{ if(conflicts.has(o) && sid < o) n++; });
+      }
+      n += unmetNeeds(sid, `${d}|${slot}`, ctx);
+    });
+  });
+  return n;
+}
+
+/* ====== SHUFFLE HISTORY ======
+   Neighbor pairs ("idA|idB") for the last few charts. Recorded each time
+   Place Students replaces a chart, so hand-made changes count too. */
+function pairKey(a, b){ return a < b ? `${a}|${b}` : `${b}|${a}`; }
+
+function neighborPairs(seatingObj){
+  const near = computeNearDeskGroups(layout, RECENT_NEAR_BUFFER);
+  const pairs = new Set();
+  Object.keys(layout).forEach(d=>{
+    const here = Object.values(seatingObj[d] || {}).filter(Boolean);
+    (near[d] || new Set([d])).forEach(o=>{
+      Object.values(seatingObj[o] || {}).filter(Boolean).forEach(b=>{
+        here.forEach(a=>{ if(a !== b) pairs.add(pairKey(a, b)); });
+      });
+    });
+  });
+  return [...pairs].sort();
+}
+
+function recordHistory(pairs){
+  if(!currentClassId || !pairs.length) return;
+  const last = historyEntries[historyEntries.length - 1];
+  if(last && last.join(',') === pairs.join(',')) return; // same chart as last time
+  const next = [...historyEntries, pairs].slice(-HISTORY_KEEP);
+  historyEntries = next;
+  db.ref(`${ROOT}/history/${currentClassId}`).set(next);
 }
 
 /* ====== SEAT ROSTER REPORT ======
@@ -1497,8 +1897,7 @@ function posKey(x, y){
 // sorting desks top-to-bottom (rows within ~20px of each other count as
 // the same row) then left-to-right, then numbering seats within each desk
 // by slot index. Used identically by the Seat Numbers view (render()),
-// the Desk Labels PDF, and the Seat Roster Report, so "Table 5" always
-// means the same physical seat everywhere it appears.
+// the Desk Labels PDF, and the Seat Roster Report.
 function computeSeatNumbering(layoutObj){
   const numbering = {}; // deskId -> { slot: seatNum }
   const deskEntries = Object.entries(layoutObj).sort((a,b)=>{
@@ -1642,14 +2041,10 @@ function generateSeatRosterReport(){
 }
 
 /* Desk labels formatted for Avery 58163 (2" x 4" labels, 10 per standard
-   US Letter sheet, arranged 2 columns x 5 rows — shares the same physical
-   layout as the more commonly-known 5163/8163 shipping label family).
-   Standard spec for this layout: 0.5" top/bottom margin, 0.15625" left/
-   right margin, 4.1875" horizontal pitch (labels + 0.1875" gap), 2.0"
-   vertical pitch (rows touch, no vertical gap). Each label shows a
-   "Table N" number at the top — matching the number shown in the app's
-   Seat Numbers view (via the shared computeSeatNumbering function) —
-   followed by one line per selected class showing who sits there. */
+   US Letter sheet, arranged 2 columns x 5 rows). Standard spec: 0.5"
+   top/bottom margin, 0.15625" left/right margin, 4.1875" horizontal pitch,
+   2.0" vertical pitch. Each label shows "Seat N" — matching the app's Seat
+   Numbers view — then one line per selected class showing who sits there. */
 function generateDeskLabels(){
   const classIds = getSelectedSeatRosterClassIds();
   if(!classIds) return;
@@ -1686,14 +2081,11 @@ function generateDeskLabels(){
       const y = topMargin + row * rowPitch;
       const padX = 0.2;
 
-      // Faint guide border — helpful for confirming print alignment even
-      // though the labels themselves are pre-cut and just peel off.
+      // Faint guide border — helpful for confirming print alignment.
       pdf.setDrawColor(220, 220, 220);
       pdf.setLineWidth(0.008);
       pdf.rect(x + 0.02, y + 0.02, labelW - 0.04, labelH - 0.04);
 
-      // "Table N" header — the number matching the room view's Table
-      // Numbers toggle, so a sub or co-teacher can find the right desk.
       pdf.setFont('helvetica', 'bold');
       pdf.setFontSize(15);
       pdf.setTextColor(206, 31, 7);
@@ -1759,18 +2151,13 @@ function deleteClass(){
   if(!currentClassId){ alert('Select a class first.'); return; }
   const sel = document.getElementById('classSelect');
   const className = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].textContent : 'this class';
-  if(!confirm(`Delete "${className}" entirely? This removes its roster, desks, seating, and locks. This can't be undone.`)) return;
+  if(!confirm(`Delete "${className}" entirely? This removes its roster, desks, seating, locks, rules, and saved charts. This can't be undone.`)) return;
   const idToDelete = currentClassId;
-  db.ref(`${ROOT}/classes/${idToDelete}`).remove();
-  db.ref(`${ROOT}/rosters/${idToDelete}`).remove();
-  db.ref(`${ROOT}/layouts/${idToDelete}`).remove();
-  db.ref(`${ROOT}/seating/${idToDelete}`).remove();
-  db.ref(`${ROOT}/locks/${idToDelete}`).remove();
-  db.ref(`${ROOT}/keepAway/${idToDelete}`).remove();
-  currentClassId = null;
-  document.getElementById('roomTitle').textContent = "No class selected";
-  document.getElementById('room').innerHTML = "";
-  document.getElementById('unassignedList').innerHTML = "";
+  ['classes','rosters','layouts','seating','locks','keepAway','roomMarkers','savedCharts','history'].forEach(node=>{
+    db.ref(`${ROOT}/${node}/${idToDelete}`).remove();
+  });
+  document.getElementById('classSelect').value = '';
+  selectClass(null);
   setStatus('Class deleted');
 }
 
@@ -1810,6 +2197,7 @@ function clearRoster(){
   db.ref(`${ROOT}/rosters/${currentClassId}`).remove();
   db.ref(`${ROOT}/seating/${currentClassId}`).remove();
   db.ref(`${ROOT}/locks/${currentClassId}`).remove();
+  db.ref(`${ROOT}/history/${currentClassId}`).remove();
   setStatus('Roster cleared');
 }
 
@@ -1888,7 +2276,7 @@ function lockedStudentsAt(deskIds, minSlot){
 function blockIfLocked(deskIds, actionText, minSlot){
   const names = lockedStudentsAt(deskIds, minSlot);
   if(names.length === 0) return false;
-  alert(`Can't ${actionText} — ${names.length === 1 ? 'this student is' : 'these students are'} in a locked seat that would be removed:\n\n${names.join('\n')}\n\nUnlock ${names.length === 1 ? 'them' : 'them'} first (🔒 in Edit Students mode, or 🔓 Clear All Locks), then try again.`);
+  alert(`Can't ${actionText} — ${names.length === 1 ? 'this student is' : 'these students are'} in a locked seat that would be removed:\n\n${names.join('\n')}\n\nUnlock them first (🔒 in Edit Students mode, or 🔓 Clear All Locks), then try again.`);
   return true;
 }
 
@@ -1899,7 +2287,8 @@ function applyTemplate(){
   const tmpl = templates[id];
   if(!tmpl) return;
   if(blockIfLocked(Object.keys(layout), 'apply a new layout')) return;
-  if(!confirm(`Apply "${tmpl.name}" to this class? Current desks and seating for this class will be replaced.`)) return;
+  if(!confirm(`Apply "${tmpl.name}" to this class? Current desks and seating will be replaced. (Your current chart is auto-saved first under Saved Seating Charts.)`)) return;
+  autoSaveBefore(`applying "${tmpl.name}"`);
   db.ref(`${ROOT}/layouts/${currentClassId}`).set(tmpl.desks || {});
   db.ref(`${ROOT}/seating/${currentClassId}`).remove();
   db.ref(`${ROOT}/locks/${currentClassId}`).remove(); // only empty reserved seats could be left
@@ -1933,7 +2322,8 @@ function generateGrid(){
   const cols = parseInt(document.getElementById('colsInput').value) || 5;
   const capacity = parseInt(document.getElementById('capacitySelect').value) || 1;
   if(blockIfLocked(Object.keys(layout), 'generate a new grid')) return;
-  if(!confirm(`This replaces the current desk layout with a ${rows}x${cols} grid (${capacity} seat${capacity>1?'s':''}/desk). Continue?`)) return;
+  if(!confirm(`This replaces the current desk layout with a ${rows}x${cols} grid (${capacity} seat${capacity>1?'s':''}/desk). Your current chart is auto-saved first under Saved Seating Charts. Continue?`)) return;
+  autoSaveBefore('Quick Grid');
 
   const { w: deskWidth, h: deskHeight } = deskSize(capacity);
   const gapX = deskWidth + 40, gapY = deskHeight + 40;
@@ -1956,32 +2346,6 @@ function generateGrid(){
   db.ref(`${ROOT}/locks/${currentClassId}`).remove(); // only empty reserved seats could be left
 }
 
-/* One-time fix for layouts built with the old, smaller rectangular seats.
-   Scales every table's position away from the layout's top-left corner by
-   how much the desk footprint grew (width and height grew by different
-   amounts, so each axis gets its own factor). Only x/y change — capacity,
-   rotation, seating, and locks are untouched. */
-function fitLayoutToSquareSeats(){
-  if(!currentClassId){ alert('Select a class first.'); return; }
-  const ids = Object.keys(layout);
-  if(ids.length === 0){ alert('This class has no tables yet.'); return; }
-  if(!confirm('Spread every table in this class apart to fit the new square seats? Seating and locks stay exactly as they are. Only do this once per class — running it again spreads things out even further.')) return;
-
-  const fx = SEAT_PX / OLD_SEAT_W;
-  const fy = deskSize(1).h / OLD_DESK_H;
-  const minX = Math.min(...ids.map(id => layout[id].x));
-  const minY = Math.min(...ids.map(id => layout[id].y));
-
-  const updates = {};
-  ids.forEach(id=>{
-    const d = layout[id];
-    updates[`${ROOT}/layouts/${currentClassId}/${id}/x`] = Math.round(minX + (d.x - minX) * fx);
-    updates[`${ROOT}/layouts/${currentClassId}/${id}/y`] = Math.round(minY + (d.y - minY) * fy);
-  });
-  db.ref().update(updates);
-  setStatus('Tables spread out');
-}
-
 function addDesk(){
   if(!currentClassId){ alert('Select or create a class first.'); return; }
   const id = slugId('desk');
@@ -2000,7 +2364,8 @@ function clearLayout(){
   const count = Object.keys(layout).length;
   if(count === 0){ alert('This class has no tables yet.'); return; }
   if(blockIfLocked(Object.keys(layout), 'clear the layout')) return;
-  if(!confirm(`Remove all ${count} tables from this class? Students stay in the roster and simply return to Unassigned. This can't be undone.`)) return;
+  if(!confirm(`Remove all ${count} tables from this class? Students stay in the roster and return to Unassigned. Your current chart is auto-saved first under Saved Seating Charts.`)) return;
+  autoSaveBefore('Clear Layout');
   db.ref(`${ROOT}/layouts/${currentClassId}`).remove();
   db.ref(`${ROOT}/seating/${currentClassId}`).remove();
   db.ref(`${ROOT}/locks/${currentClassId}`).remove();
@@ -2113,24 +2478,38 @@ function duplicateSelected(){
 }
 
 /* ====== SEATING ACTIONS ====== */
+/* Place Students:
+   1. Remember the chart being replaced (shuffle history).
+   2. Seat students with front-row / near-teacher needs first, each in the
+      best open seat that meets their needs.
+   3. Fill the remaining seats front to back in the chosen order, routing
+      around keep-apart conflicts and (Random order only) recent neighbors.
+   Locked seats and the students in them are never touched. */
 function randomizeAll(){
   if(!currentClassId) return;
   if(Object.keys(layout).length === 0){ alert('Generate or add desks first.'); return; }
 
-  const placementOrder = document.getElementById('placementOrderSelect') ? document.getElementById('placementOrderSelect').value : 'random';
-  const alternate = placementOrder === 'random' && document.getElementById('alternateGenderToggle').checked;
+  const placementOrder = document.getElementById('placementOrderSelect').value;
+  const isRandom = placementOrder === 'random';
+  const alternate = isRandom && document.getElementById('alternateGenderToggle').checked;
+  const avoidRecent = isRandom && document.getElementById('avoidRecentToggle').checked;
+
+  const currentPairs = hasAnySeated() ? neighborPairs(seating) : [];
+  recordHistory(currentPairs);
+  const recent = new Set(avoidRecent ? [].concat(...historyEntries, currentPairs) : []);
 
   const lastNameOf = (name)=>{
     const parts = (name || '').trim().split(/\s+/);
     return parts[parts.length - 1] || '';
   };
 
+  // Front of the room (bottom of the chart) first.
   const deskEntries = Object.entries(layout).sort((a,b)=>{
     if(Math.abs(a[1].y - b[1].y) > 20) return b[1].y - a[1].y;
     return a[1].x - b[1].x;
   });
 
-  const openSlots = [];
+  let openSlots = [];
   deskEntries.forEach(([deskId, d])=>{
     const cap = d.capacity || 1;
     for(let i=0;i<cap;i++){
@@ -2177,16 +2556,10 @@ function randomizeAll(){
     ordered = [...pool].sort(()=>Math.random()-0.5);
   }
 
-  // Keep-Apart-aware placement: walk the open seats in placement order and,
-  // for each one, pull the EARLIEST remaining student in `ordered` who
-  // doesn't conflict with anyone already seated in a "near" desk (same
-  // desk or a desk pushed right up against it). This preserves the chosen
-  // order (random/alpha/alternate) as closely as possible while routing
-  // around conflicts. If every remaining student would conflict with that
-  // one seat, we place the earliest one anyway (unavoidable, e.g. a tiny
-  // 2-seat pod holding two members of the same group) and note it at the end.
-  const nearDesks = computeNearDeskGroups(layout);
-  const remaining = [...ordered];
+  const ctx = buildRuleContext();
+  const recentMap = recent.size ? computeNearDeskGroups(layout, RECENT_NEAR_BUFFER) : null;
+
+  // Start from the locked seats only.
   const newSeating = {};
   Object.entries(seating).forEach(([deskId, seats])=>{
     Object.entries(seats||{}).forEach(([slot, sid])=>{
@@ -2197,33 +2570,150 @@ function randomizeAll(){
     });
   });
 
-  let unavoidableConflicts = 0;
-  openSlots.forEach(s=>{
-    if(remaining.length === 0) return;
-    const nearby = studentsNearSlot(nearDesks, s.deskId, s.slot).concat(
-      // students already placed earlier in this same run at near desks
-      Object.entries(newSeating).filter(([dId])=> (nearDesks[s.deskId]||new Set()).has(dId))
-        .flatMap(([,seats])=>Object.values(seats))
-    );
-    let pickIdx = remaining.findIndex(sid=>{
-      const conflicts = getConflictSet(sid);
-      return !nearby.some(nid => conflicts.has(nid));
-    });
-    if(pickIdx === -1){
-      pickIdx = 0;
-      if(nearby.some(nid => getConflictSet(remaining[0]).has(nid))) unavoidableConflicts++;
-    }
-    const sid = remaining.splice(pickIdx, 1)[0];
+  const keepApartHits = (sid, s)=>{
+    const conflicts = getConflictSet(sid);
+    if(!conflicts.size) return 0;
+    return occupantsNear(ctx.nearMap, newSeating, s.deskId, s.slot).filter(o => conflicts.has(o)).length;
+  };
+  const recentHits = (sid, s)=>{
+    if(!recentMap) return 0;
+    return occupantsNear(recentMap, newSeating, s.deskId, s.slot).filter(o => recent.has(pairKey(sid, o))).length;
+  };
+  const seatIt = (sid, s)=>{
     newSeating[s.deskId] = newSeating[s.deskId] || {};
     newSeating[s.deskId][s.slot] = sid;
+  };
+
+  let unavoidableConflicts = 0;
+  let unmetCount = 0;
+
+  // Step 2: students with front-row / near-teacher needs (near teacher first,
+  // since those seats are the scarcest).
+  const needy = ordered.filter(sid => hasNeeds(roster[sid]))
+    .sort((a,b)=> (roster[b].nearTeacher ? 1 : 0) - (roster[a].nearTeacher ? 1 : 0));
+  needy.forEach(sid=>{
+    if(openSlots.length === 0) return;
+    let best = null, bestScore = Infinity;
+    openSlots.forEach(s=>{
+      const score = unmetNeeds(sid, `${s.deskId}|${s.slot}`, ctx) * 100000
+                  + keepApartHits(sid, s) * 1000
+                  + recentHits(sid, s)
+                  + Math.random() * 0.5; // random tie-break
+      if(score < bestScore){ bestScore = score; best = s; }
+    });
+    const unmet = unmetNeeds(sid, `${best.deskId}|${best.slot}`, ctx);
+    if(unmet) unmetCount++;
+    if(keepApartHits(sid, best)) unavoidableConflicts++;
+    seatIt(sid, best);
+    openSlots = openSlots.filter(s => s !== best);
+  });
+
+  // Step 3: everyone else, front to back, in the chosen order.
+  const needySet = new Set(needy);
+  const remaining = ordered.filter(sid => !needySet.has(sid));
+  const genderOf = sid => (roster[sid] && roster[sid].gender) || 'unspecified';
+  openSlots.forEach(s=>{
+    if(remaining.length === 0) return;
+    // With Alternate gender on, prefer the next student of the expected
+    // gender, so avoiding recent neighbors doesn't break the alternation.
+    const wantGender = alternate ? genderOf(remaining[0]) : null;
+    let pickIdx = 0, bestScore = Infinity;
+    remaining.forEach((sid, idx)=>{
+      const score = keepApartHits(sid, s) * 1000
+                  + recentHits(sid, s)
+                  + (wantGender && genderOf(sid) !== wantGender ? 500 : 0);
+      if(score < bestScore){ bestScore = score; pickIdx = idx; }
+    });
+    const sid = remaining.splice(pickIdx, 1)[0];
+    if(keepApartHits(sid, s)) unavoidableConflicts++;
+    seatIt(sid, s);
   });
 
   db.ref(`${ROOT}/seating/${currentClassId}`).set(newSeating);
-  if(unavoidableConflicts > 0){
-    setStatus('Reshuffled (some conflicts unavoidable)');
-    alert(`Placed everyone, but the layout was too tight to keep every Keep-Apart group fully separated (${unavoidableConflicts} seat${unavoidableConflicts>1?'s':''} affected). Check the seats with a ⚠️ icon in Edit Students mode.`);
+
+  const problems = [];
+  if(unavoidableConflicts > 0) problems.push(`${unavoidableConflicts} seat${unavoidableConflicts>1?'s':''} couldn't be kept away from a Keep-Apart groupmate`);
+  if(unmetCount > 0) problems.push(`${unmetCount} student${unmetCount>1?'s':''} couldn't get a front-row or near-teacher seat (not enough of those seats are unlocked)`);
+  if(problems.length){
+    setStatus('Placed (some rules not met)');
+    alert(`Placed everyone, but the room was too tight for every rule:\n\n• ${problems.join('\n• ')}\n\nThose seats show a ⚠️ in Edit Students mode.`);
   } else {
     setStatus('Reshuffled');
+  }
+}
+
+/* Fix Rule Breaks ("fix with fewest moves"):
+   Keeps the chart as-is and only moves students who are breaking a rule.
+   Each round, it tries swapping each rule-breaker with every unlocked seat
+   (empty seats count as a one-student move) and takes the swap that fixes
+   the most, preferring the swap that moves fewer students. Stops when
+   nothing is broken or no swap helps. Locked seats are never touched. */
+function fixRuleBreaks(){
+  if(!currentClassId) return;
+  if(Object.keys(layout).length === 0){ alert('Generate or add desks first.'); return; }
+
+  const ctx = buildRuleContext();
+  const work = cloneSeating(seating);
+  let current = countViolations(work, ctx);
+  if(current === 0){ alert('No rules are broken right now — nothing to fix.'); return; }
+  const start = current;
+
+  const isLocked = (d, s)=> !!(locks[d] && locks[d][s]);
+  const slots = [];
+  Object.entries(layout).forEach(([d, p])=>{
+    for(let i = 0; i < (p.capacity || 1); i++) if(!isLocked(d, i)) slots.push({ d, s: String(i) });
+  });
+  const get = sl => (work[sl.d] && work[sl.d][sl.s]) || null;
+  const put = (sl, sid)=>{
+    if(sid) (work[sl.d] = work[sl.d] || {})[sl.s] = sid;
+    else if(work[sl.d]) delete work[sl.d][sl.s];
+  };
+  const swap = (a, b)=>{ const va = get(a), vb = get(b); put(a, vb); put(b, va); };
+  const breaksRule = (sl)=>{
+    const sid = get(sl);
+    if(!sid) return false;
+    if(unmetNeeds(sid, `${sl.d}|${sl.s}`, ctx)) return true;
+    const conflicts = getConflictSet(sid);
+    return conflicts.size > 0 && occupantsNear(ctx.nearMap, work, sl.d, sl.s).some(o => conflicts.has(o));
+  };
+
+  for(let round = 0; round < 40 && current > 0; round++){
+    let best = null;
+    slots.filter(breaksRule).forEach(a=>{
+      slots.forEach(b=>{
+        if(a === b) return;
+        const cost = get(b) ? 2 : 1;
+        swap(a, b);
+        const v = countViolations(work, ctx);
+        swap(a, b);
+        if(v < current && (!best || v < best.v || (v === best.v && cost < best.cost))){
+          best = { a, b, v, cost };
+        }
+      });
+    });
+    if(!best) break;
+    swap(best.a, best.b);
+    current = best.v;
+  }
+
+  if(current === start){
+    alert("Couldn't find any swaps that fix the broken rules — the room may be too tight (for example, more front-row students than open front-row seats). Try unlocking some seats, or use 📌 Place Students.");
+    return;
+  }
+
+  // Count how many students actually changed seats.
+  const where = obj=>{
+    const m = {};
+    Object.entries(obj).forEach(([d, seats])=> Object.entries(seats || {}).forEach(([s, sid])=>{ if(sid) m[sid] = `${d}|${s}`; }));
+    return m;
+  };
+  const before = where(cloneSeating(seating)), after = where(work);
+  const moved = Object.keys(after).filter(sid => before[sid] !== after[sid]).length;
+
+  db.ref(`${ROOT}/seating/${currentClassId}`).set(work);
+  setStatus(`Fixed by moving ${moved} student${moved===1?'':'s'}`);
+  if(current > 0){
+    alert(`Moved ${moved} student${moved===1?'':'s'} and fixed ${start - current} of ${start} rule breaks. The rest couldn't be fixed with the unlocked seats available — they still show a ⚠️.`);
   }
 }
 
@@ -2279,7 +2769,7 @@ function clearSeats(){
 
 function clearAllLocks(){
   if(!currentClassId) return;
-  const lockCount = Object.values(locks).reduce((sum, deskLocks)=> sum + Object.keys(deskLocks||{}).length, 0);
+  const lockCount = Object.values(locks).reduce((sum, deskLocks)=> sum + Object.values(deskLocks||{}).filter(Boolean).length, 0);
   if(lockCount === 0){ alert('No seats are currently locked.'); return; }
   if(!confirm(`Unlock all ${lockCount} locked seat(s) in this class? Any students in them stay seated — this only removes the lock.`)) return;
   db.ref(`${ROOT}/locks/${currentClassId}`).remove();
@@ -2332,69 +2822,78 @@ function render(){
     Object.values(seats||{}).forEach(sid=>{ if(sid) seatedIds.add(sid); });
   });
 
-  // Only computed when the toggle is on. Uses the SAME numbering function
-  // as the Desk Labels PDF and Seat Roster Report, so the number shown on
-  // a seat here always matches the number printed on its physical label.
+  const editingLayout = viewMode === 'editLayout';
+  const editingStudents = viewMode === 'editStudents';
+
+  // Same numbering as the Desk Labels PDF and Seat Roster Report.
   const seatNumbering = showSeatNumbers ? computeSeatNumbering(layout) : null;
 
-  // Keep-Apart conflict flags: only worth computing if there's at least
-  // one group defined for this class.
+  // Rule checks — only computed when there's a rule to check.
   const hasKeepAway = Object.keys(keepAwayGroups).length > 0;
-  const nearDesks = hasKeepAway ? computeNearDeskGroups(layout) : null;
+  const anyNeeds = Object.values(roster).some(hasNeeds);
+  const ruleCtx = (hasKeepAway || anyNeeds) && Object.keys(layout).length ? buildRuleContext() : null;
 
   Object.entries(layout).forEach(([deskId, pos])=>{
     const capacity = pos.capacity || 1;
     const desk = document.createElement('div');
     const isSelected = selectedDeskIds.has(deskId);
-    const editingLayout = viewMode === 'editLayout';
-    const editingStudents = viewMode === 'editStudents';
     desk.className = 'desk' + (editingLayout ? ' arrangeMode layoutTools' : '') + (capacity === 1 ? ' single' : '') + (editingLayout ? ' movable' : '') + (selectMode ? ' selectable' : '') + (isSelected ? ' selected' : '');
     desk.dataset.deskId = deskId;
     desk.style.left = pos.x + 'px';
     desk.style.top = pos.y + 'px';
-
 
     const rotation = pos.rotation || 0;
     desk.style.transform = `rotate(${rotation}deg)`;
 
     for(let i=0;i<capacity;i++){
       const studentId = seating[deskId] ? seating[deskId][i] : null;
+      const stu = studentId ? roster[studentId] : null;
       const isLocked = !!(locks[deskId] && locks[deskId][i]);
-      const gender = studentId && roster[studentId] ? roster[studentId].gender : '';
+      const gender = stu ? stu.gender : '';
       const genderClass = gender === 'M' ? ' male' : (gender === 'F' ? ' female' : '');
 
-      // Does this seat's occupant share a Keep-Apart group with anyone
-      // seated in a "near" desk (including other seats at this same desk)?
-      let hasConflict = false;
-      if(hasKeepAway && studentId){
+      // Which rules (if any) does this seat's occupant break?
+      const ruleProblems = [];
+      if(ruleCtx && stu){
         const conflicts = getConflictSet(studentId);
-        if(conflicts.size > 0){
-          const nearby = studentsNearSlot(nearDesks, deskId, i);
-          hasConflict = nearby.some(nid => conflicts.has(nid));
+        if(conflicts.size && occupantsNear(ruleCtx.nearMap, seating, deskId, i).some(o => conflicts.has(o))){
+          ruleProblems.push('Seated near someone from the same Keep-Apart group');
         }
+        const key = `${deskId}|${i}`;
+        if(stu.front && !ruleCtx.front.has(key)) ruleProblems.push('Needs the front row');
+        if(stu.nearTeacher && !ruleCtx.nearT.has(key)) ruleProblems.push('Needs to be near the teacher');
       }
 
       const seat = document.createElement('div');
-      seat.className = 'seat' + (studentId ? ' filled' : ' empty') + genderClass + (isLocked ? ' locked' : '') + (hasConflict ? ' conflictWarn' : '');
+      seat.className = 'seat' + (stu ? ' filled' : ' empty') + genderClass + (isLocked ? ' locked' : '') + (ruleProblems.length ? ' conflictWarn' : '');
       seat.style.position = 'relative';
 
       // Top 3/4: name
       const label = document.createElement('span');
       label.className = 'seatName';
-      label.textContent = studentId && roster[studentId] ? roster[studentId].name : 'Empty';
-      if(studentId && editingStudents){
+      label.textContent = stu ? stu.name : 'Empty';
+      if(stu && editingStudents){
         label.style.cursor = 'pointer';
         label.title = 'Click to rename this student';
         label.onclick = (e)=>{ e.stopPropagation(); renameStudent(studentId); };
       }
       seat.appendChild(label);
 
-      if(hasConflict){
+      if(ruleProblems.length){
         const warnIcon = document.createElement('span');
         warnIcon.className = 'conflictIcon';
         warnIcon.textContent = '⚠️';
-        warnIcon.title = 'Seated near another student from the same Keep-Apart group';
+        warnIcon.title = ruleProblems.join('\n');
         seat.appendChild(warnIcon);
+      }
+
+      // Front row / Near teacher marks — Edit Students mode only.
+      if(editingStudents && hasNeeds(stu)){
+        const badges = document.createElement('div');
+        badges.className = 'needsBadges';
+        if(stu.front){ const b = document.createElement('span'); b.textContent = 'FRONT'; badges.appendChild(b); }
+        if(stu.nearTeacher){ const b = document.createElement('span'); b.textContent = 'NEAR T'; badges.appendChild(b); }
+        seat.appendChild(badges);
       }
 
       if(seatNumbering && seatNumbering[deskId] && seatNumbering[deskId][i] !== undefined){
@@ -2418,7 +2917,7 @@ function render(){
         lockBtn.onclick = (e)=>{ e.stopPropagation(); toggleLock(deskId, i); };
         tools.appendChild(lockBtn);
 
-        if(studentId && !isLocked){
+        if(stu && !isLocked){
           const unseatBtn = document.createElement('button');
           unseatBtn.type = 'button';
           unseatBtn.className = 'unseatBtn';
@@ -2436,7 +2935,7 @@ function render(){
         seat.ondragover = (e)=>{ e.preventDefault(); seat.classList.add('dropTarget'); };
         seat.ondragleave = ()=> seat.classList.remove('dropTarget');
         seat.ondrop = (e)=> dropOnSeat(e, deskId, i);
-        if(studentId){
+        if(stu){
           seat.draggable = true;
           seat.ondragstart = (e)=>{
             e.dataTransfer.setData('text/student', studentId);
@@ -2480,6 +2979,21 @@ function render(){
     room.appendChild(desk);
   });
 
+  // Teacher desk marker — used by the Near teacher rule. Draggable in Edit Layout.
+  if(Object.keys(layout).length){
+    const t = getTeacherPos();
+    const td = document.createElement('div');
+    td.className = 'teacherDesk' + (editingLayout ? ' movable' : '');
+    td.style.left = t.x + 'px';
+    td.style.top = t.y + 'px';
+    td.textContent = 'Teacher Desk';
+    if(editingLayout){
+      td.title = 'Drag to where your desk really is. The Near teacher rule measures from here.';
+      td.onmousedown = (e)=> startTeacherDrag(e, td);
+    }
+    room.appendChild(td);
+  }
+
   const list = document.getElementById('unassignedList');
   list.innerHTML = '';
   const unassigned = Object.entries(roster)
@@ -2518,6 +3032,33 @@ function render(){
     chip.appendChild(del);
     list.appendChild(chip);
   });
+}
+
+/* ====== TEACHER DESK DRAGGING ====== */
+function startTeacherDrag(e, el){
+  e.preventDefault();
+  const sx = e.clientX, sy = e.clientY;
+  const start = getTeacherPos();
+  let moved = false, nx = start.x, ny = start.y;
+  el.classList.add('dragging');
+
+  function onMove(ev){
+    const dx = ev.clientX - sx, dy = ev.clientY - sy;
+    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) moved = true;
+    if(!moved) return;
+    nx = Math.max(0, Math.round(start.x + dx));
+    ny = Math.max(0, Math.round(start.y + dy));
+    el.style.left = nx + 'px';
+    el.style.top = ny + 'px';
+  }
+  function onUp(){
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    el.classList.remove('dragging');
+    if(moved) db.ref(`${ROOT}/roomMarkers/${currentClassId}/teacher`).set({ x: nx, y: ny });
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 }
 
 /* ====== DESK DRAGGING / SELECTION ====== */
@@ -2669,14 +3210,9 @@ function startDeskDrag(e, deskId, deskEl){
 }
 
 /* ====== EXPORT PDF ======
-   Draws the chart straight into the PDF as shapes and text instead of
-   screenshotting #room. The old html2canvas screenshot was limited to the
-   size #room happened to be on screen (it's a flex child locked to the
-   window height), so tables past that edge were clipped before the PDF
-   was even built — which is why Landscape and Portrait cut off the same
-   table in the same place. This version works from the layout data, crops
-   to the tables themselves (no empty grid around them), and scales that
-   to fill the chosen page. */
+   Draws the chart straight into the PDF as shapes and text, working from
+   the layout data. Crops to the tables themselves and scales that to fill
+   the chosen page. */
 const PRINT_COLORS = {
   male:   { fill:'#d3e4f5', stroke:'#4f86c0' },
   female: { fill:'#d5ecd8', stroke:'#4f9a5c' },
@@ -2903,61 +3439,31 @@ function exportPDF(orientationChoice){
     alert('Export failed: ' + err.message);
   }
 }
+
 /* ====== EXPOSE FUNCTIONS ====== */
-window.togglePanel = togglePanel;
-window.saveTeacherName = saveTeacherName;
-window.saveTeacherNameWithStatus = saveTeacherNameWithStatus;
-window.openNewClassModal = openNewClassModal;
-window.closeNewClassModal = closeNewClassModal;
-window.createNewClass = createNewClass;
-window.renameClass = renameClass;
-window.deleteClass = deleteClass;
-window.setViewMode = setViewMode;
-window.handleCSV = handleCSV;
-window.clearRoster = clearRoster;
-window.applyTemplate = applyTemplate;
-window.saveAsTemplate = saveAsTemplate;
-window.deleteTemplate = deleteTemplate;
-window.generateGrid = generateGrid;
-window.fitLayoutToSquareSeats = fitLayoutToSquareSeats;
-window.addDesk = addDesk;
-window.clearLayout = clearLayout;
-window.toggleSeatNumbers = toggleSeatNumbers;
-window.toggleSelectMode = toggleSelectMode;
-window.duplicateSelected = duplicateSelected;
-window.clearSelection = clearSelection;
-window.randomizeAll = randomizeAll;
-window.clearSeats = clearSeats;
-window.clearAllLocks = clearAllLocks;
-window.openExportModal = openExportModal;
-window.closeExportModal = closeExportModal;
-window.exportPDF = exportPDF;
-window.openHelpModal = openHelpModal;
-window.closeHelpModal = closeHelpModal;
-window.openSeatRosterModal = openSeatRosterModal;
-window.closeSeatRosterModal = closeSeatRosterModal;
-window.generateSeatRosterReport = generateSeatRosterReport;
-window.generateDeskLabels = generateDeskLabels;
-window.openKeepAwayModal = openKeepAwayModal;
-window.closeKeepAwayModal = closeKeepAwayModal;
-window.createKeepAwayGroup = createKeepAwayGroup;
-window.addStudentManually = addStudentManually;
-window.dropOnUnassigned = dropOnUnassigned;
-window.removeDesk = removeDesk;
-window.editCapacity = editCapacity;
-window.rotateDesk = rotateDesk;
-window.toggleLock = toggleLock;
-window.cycleGender = cycleGender;
-window.renameStudent = renameStudent;
-window.removeStudent = removeStudent;
-window.unseatSlot = unseatSlot;
-window.seatStudent = seatStudent;
-window.dropOnSeat = dropOnSeat;
+Object.assign(window, {
+  togglePanel, saveTeacherName, saveTeacherNameWithStatus, saveAvoidRecent,
+  openNewClassModal, closeNewClassModal, createNewClass, renameClass, deleteClass,
+  setViewMode, handleCSV, clearRoster,
+  applyTemplate, saveAsTemplate, deleteTemplate,
+  saveCurrentChart, restoreChart, deleteChart,
+  generateGrid, addDesk, clearLayout, toggleSeatNumbers, toggleSelectMode,
+  duplicateSelected, clearSelection,
+  randomizeAll, fixRuleBreaks, clearSeats, clearAllLocks,
+  openExportModal, closeExportModal, exportPDF,
+  openHelpModal, closeHelpModal,
+  openSeatRosterModal, closeSeatRosterModal, generateSeatRosterReport, generateDeskLabels,
+  openKeepAwayModal, closeKeepAwayModal, createKeepAwayGroup,
+  openNeedsModal, closeNeedsModal,
+  addStudentManually, dropOnUnassigned, removeDesk, editCapacity, rotateDesk,
+  toggleLock, cycleGender, renameStudent, removeStudent, unseatSlot, seatStudent, dropOnSeat
+});
 
 /* ====== INIT ====== */
 loadClassList();
 loadTemplateList();
 loadTeacherName();
+loadAvoidRecent();
 applyStoredPanelState();
 setViewMode('clean');
 
