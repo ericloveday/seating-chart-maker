@@ -330,6 +330,22 @@
   }
   .teacherDesk.movable{ cursor:grab; box-shadow:0 0 0 3px rgba(138,109,69,.25); }
   .teacherDesk.dragging{ opacity:.6; cursor:grabbing; }
+  .teacherDesk{ text-align:center; line-height:1.2; }
+  .teacherDesk.sideways{ font-size:11px; padding:0 4px; }
+  .teacherRotateBtn{
+    position:absolute;
+    right:3px; bottom:3px;
+    width:22px; height:22px;
+    padding:0;
+    border-radius:5px;
+    background:#fff;
+    border:1.5px solid #8a6d45;
+    color:#5b4526;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+  }
+  .teacherRotateBtn:hover{ background:#f6efe3; }
+  .teacherRotateBtn svg{ width:15px; height:15px; fill:currentColor; }
 
   /* ---------------- Square seats ----------------
      Top 3/4: the student's name. Bottom 1/4: a toolbar with the editing
@@ -1043,14 +1059,14 @@
       <li><b>Table toolbar</b> (bottom of each table), left to right: <b>rotate</b> 90°, <b>seats</b> (chair icon with the seat count, 1–6), and <b>×</b> to remove the table. Rotating turns the table around its center, so you may need to nudge it back into place.</li>
       <li><b>Select Tables: On</b> lets you click tables to select them (blue outline). Drag one and the whole selection moves together. <b>Duplicate Selected</b> copies the selection just to the right and selects the copies, so you can keep duplicating. <b>Clear Selection</b> deselects.</li>
       <li>While dragging, blue guide lines appear when edges or centers line up with another table, and the table snaps into place.</li>
-      <li><b>Teacher Desk</b> box: drag it to where your desk really is. The Near teacher rule measures from it.</li>
+      <li><b>Teacher Desk</b> box: drag it to where your desk really is, and click its <b>rotate</b> button to turn it sideways. The Near teacher rule measures from it, and it prints on the PDF.</li>
     </ul>
     <div class="tip">
       <b>Same tables for every Core:</b> build the tables once in Core 1, click <b>📋 Copy Tables to Other Classes...</b>, check Cores 2–4, then switch to each Core and click <b>📌 Place Students</b>.
     </div>
 
     <h3>Exporting</h3>
-    <p><b>Export/Print PDF</b> lets you choose Landscape, Portrait, or Auto (whichever prints your tables biggest). The PDF is cropped to your tables and scaled to fill the page, with the class name, your teacher name, and the date and time at the top. Seats are shaded by gender (blue for boys, green for girls). Locks, ⚠️ warnings, Front/Near-teacher labels, toolbars, and the Teacher Desk box don't print. If <b>🔢 Seat Numbers</b> is on, the seat numbers print too.</p>
+    <p><b>Export/Print PDF</b> lets you choose Landscape, Portrait, or Auto (whichever prints your tables biggest). The PDF is cropped to your tables and scaled to fill the page, with the class name, your teacher name, and the date and time at the top. Seats are shaded by gender (blue for boys, green for girls). The <b>Teacher Desk</b> prints where you've placed it, so the chart shows which way the room faces. Locks, ⚠️ warnings, Front/Near-teacher labels, and toolbars don't print. If <b>🔢 Seat Numbers</b> is on, the seat numbers print too.</p>
     <p><b>🔢 Seat Numbers</b> numbers every seat top-to-bottom, then left-to-right. The <b>🖨️ Seat Roster Report</b> uses the same numbers: pick the classes that share a layout (e.g. Core 1–4) for a table with one row per seat and a column per class, or print <b>🏷️ Desk Labels</b> on Avery 58163 sheets (2" × 4", 10 per sheet) showing each seat number and who sits there in each class.</p>
 
     <div class="btnRow">
@@ -1292,7 +1308,7 @@ let seating = {};
 let locks = {};
 let templates = {};
 let keepAwayGroups = {};
-let roomMarkers = {};      // { teacher: {x, y} } for the current class
+let roomMarkers = {};      // { teacher: {x, y, rotation} } for the current class
 let savedCharts = {};      // { chartId: {name, savedAt, auto, layout, seating, locks, teacher} }
 let historyEntries = [];   // last few charts' neighbor pairs, oldest first: [[ "a|b", ... ], ...]
 let viewMode = 'clean';
@@ -1813,6 +1829,25 @@ function getTeacherPos(){
   const t = roomMarkers && roomMarkers.teacher;
   return (t && isFinite(t.x) && isFinite(t.y)) ? t : defaultTeacherPos();
 }
+// The teacher desk's real footprint: 150x64 normally, 64x150 when turned sideways.
+function teacherBox(t){
+  const sideways = (((t.rotation || 0) % 180) + 180) % 180 === 90;
+  return { x: t.x, y: t.y, w: sideways ? TEACHER_H : TEACHER_W, h: sideways ? TEACHER_W : TEACHER_H, sideways };
+}
+function getTeacherBox(){ return teacherBox(getTeacherPos()); }
+
+// Turns the teacher desk 90° around its own center (it's a rectangle, so
+// two positions cover it: long side horizontal or long side vertical).
+function rotateTeacherDesk(){
+  if(!currentClassId) return;
+  const t = getTeacherPos();
+  const b = teacherBox(t);
+  db.ref(`${ROOT}/roomMarkers/${currentClassId}/teacher`).set({
+    x: Math.max(0, Math.round(t.x + (b.w - b.h) / 2)),
+    y: Math.max(0, Math.round(t.y + (b.h - b.w) / 2)),
+    rotation: b.sideways ? 0 : 90
+  });
+}
 
 function buildRuleContext(){
   const centers = seatCenters(layout);
@@ -1822,11 +1857,11 @@ function buildRuleContext(){
   if(keys.length){
     const maxY = Math.max(...keys.map(k => centers[k].y));
     keys.forEach(k=>{ if(centers[k].y >= maxY - SEAT_PX * 0.75) front.add(k); });
-    const t = getTeacherPos();
+    const t = getTeacherBox();
     keys.forEach(k=>{
       const c = centers[k];
-      const dx = Math.max(t.x - c.x, 0, c.x - (t.x + TEACHER_W));
-      const dy = Math.max(t.y - c.y, 0, c.y - (t.y + TEACHER_H));
+      const dx = Math.max(t.x - c.x, 0, c.x - (t.x + t.w));
+      const dy = Math.max(t.y - c.y, 0, c.y - (t.y + t.h));
       if(Math.hypot(dx, dy) <= NEAR_TEACHER_PX) nearT.add(k);
     });
   }
@@ -3124,15 +3159,26 @@ function render(){
 
   // Teacher desk marker — used by the Near teacher rule. Draggable in Edit Layout.
   if(Object.keys(layout).length){
-    const t = getTeacherPos();
+    const t = getTeacherBox();
     const td = document.createElement('div');
-    td.className = 'teacherDesk' + (editingLayout ? ' movable' : '');
+    td.className = 'teacherDesk' + (t.sideways ? ' sideways' : '') + (editingLayout ? ' movable' : '');
     td.style.left = t.x + 'px';
     td.style.top = t.y + 'px';
+    td.style.width = t.w + 'px';
+    td.style.height = t.h + 'px';
     td.textContent = 'Teacher Desk';
     if(editingLayout){
       td.title = 'Drag to where your desk really is. The Near teacher rule measures from here.';
       td.onmousedown = (e)=> startTeacherDrag(e, td);
+      const rot = document.createElement('button');
+      rot.type = 'button';
+      rot.className = 'teacherRotateBtn';
+      rot.innerHTML = ROTATE_SVG;
+      rot.title = 'Rotate the teacher desk 90°';
+      rot.setAttribute('aria-label', rot.title);
+      rot.onmousedown = (e)=> e.stopPropagation();
+      rot.onclick = (e)=>{ e.stopPropagation(); rotateTeacherDesk(); };
+      td.appendChild(rot);
     }
     room.appendChild(td);
   }
@@ -3180,6 +3226,7 @@ function render(){
 
 /* ====== TEACHER DESK DRAGGING ====== */
 function startTeacherDrag(e, el){
+  if(e.target.closest('.teacherRotateBtn')) return;
   e.preventDefault();
   const sx = e.clientX, sy = e.clientY;
   const start = getTeacherPos();
@@ -3199,7 +3246,7 @@ function startTeacherDrag(e, el){
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
     el.classList.remove('dragging');
-    if(moved) db.ref(`${ROOT}/roomMarkers/${currentClassId}/teacher`).set({ x: nx, y: ny });
+    if(moved) db.ref(`${ROOT}/roomMarkers/${currentClassId}/teacher`).set({ x: nx, y: ny, rotation: start.rotation || 0 });
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
@@ -3364,7 +3411,10 @@ const PRINT_COLORS = {
   desk:   '#6b7079',
   name:   '#111827',
   empty:  '#9ca3af',
-  badge:  '#2563eb'
+  badge:  '#2563eb',
+  teacherFill:   '#efe4d1',
+  teacherStroke: '#8a6d45',
+  teacherText:   '#5b4526'
 };
 
 function hexToRgb(hex){
@@ -3449,11 +3499,23 @@ function buildSeatingPDF(opts){
   const { jsPDF, layoutObj, seatingObj, rosterObj, title, teacher, orientationChoice, seatNumbering } = opts;
   const geo = computePrintGeometry(layoutObj);
 
+  // Crop to the tables AND the teacher desk.
+  const tb = opts.teacherBox || null;
+  const bounds = { ...geo.bounds };
+  if(tb){
+    const right = Math.max(bounds.x + bounds.w, tb.x + tb.w);
+    const bottom = Math.max(bounds.y + bounds.h, tb.y + tb.h);
+    bounds.x = Math.min(bounds.x, tb.x);
+    bounds.y = Math.min(bounds.y, tb.y);
+    bounds.w = right - bounds.x;
+    bounds.h = bottom - bounds.y;
+  }
+
   const margin = 30, headerSpace = 44;
   const pages = { landscape: { w: 792, h: 612 }, portrait: { w: 612, h: 792 } };
   const fitScale = p => Math.min(
-    (p.w - margin * 2) / geo.bounds.w,
-    (p.h - margin * 2 - headerSpace) / geo.bounds.h
+    (p.w - margin * 2) / bounds.w,
+    (p.h - margin * 2 - headerSpace) / bounds.h
   );
 
   // Auto = whichever orientation prints the tables bigger.
@@ -3464,10 +3526,10 @@ function buildSeatingPDF(opts){
   const page = pages[orient];
   const scale = fitScale(page);
   const areaW = page.w - margin * 2, areaH = page.h - margin * 2 - headerSpace;
-  const offX = margin + (areaW - geo.bounds.w * scale) / 2;
-  const offY = margin + headerSpace + (areaH - geo.bounds.h * scale) / 2;
-  const X = v => offX + (v - geo.bounds.x) * scale;
-  const Y = v => offY + (v - geo.bounds.y) * scale;
+  const offX = margin + (areaW - bounds.w * scale) / 2;
+  const offY = margin + headerSpace + (areaH - bounds.h * scale) / 2;
+  const X = v => offX + (v - bounds.x) * scale;
+  const Y = v => offY + (v - bounds.y) * scale;
 
   const pdf = new jsPDF({ orientation: orient, unit: 'pt', format: 'letter' });
 
@@ -3489,6 +3551,23 @@ function buildSeatingPDF(opts){
   const pad = 7 * scale;
   const lineW = Math.max(0.75, 2 * scale);
   const maxFont = Math.min(18, Math.max(7, seatSide * 0.17));
+
+  if(tb){
+    const tx = X(tb.x), ty = Y(tb.y), tw = tb.w * scale, th = tb.h * scale;
+    pdf.setLineWidth(lineW);
+    pdf.setDrawColor(...hexToRgb(PRINT_COLORS.teacherStroke));
+    pdf.setFillColor(...hexToRgb(PRINT_COLORS.teacherFill));
+    pdf.roundedRect(tx, ty, tw, th, 8 * scale, 8 * scale, 'FD');
+    const lines = tb.sideways ? ['Teacher', 'Desk'] : ['Teacher Desk'];
+    const fs = Math.max(6, Math.min(16, Math.min(tw, th) * 0.22));
+    pdf.setFont('helvetica', 'bold');
+    pdf.setFontSize(fs);
+    pdf.setTextColor(...hexToRgb(PRINT_COLORS.teacherText));
+    const lh = fs * 1.15, tcx = tx + tw / 2, tcy = ty + th / 2;
+    lines.forEach((line, k)=>{
+      pdf.text(line, tcx, tcy - (lines.length - 1) * lh / 2 + k * lh, { align: 'center', baseline: 'middle' });
+    });
+  }
 
   geo.desks.forEach(d=>{
     if(d.outline){
@@ -3572,7 +3651,8 @@ function exportPDF(orientationChoice){
       title,
       teacher: document.getElementById('teacherNameInput').value.trim(),
       orientationChoice: orientationChoice || 'auto',
-      seatNumbering: showSeatNumbers ? computeSeatNumbering(layout) : null
+      seatNumbering: showSeatNumbers ? computeSeatNumbering(layout) : null,
+      teacherBox: getTeacherBox()
     });
     const stamp = now.toISOString().slice(0,16).replace('T','_').replace(':','-');
     pdf.save(title.replace(/[^a-z0-9]+/gi, '_') + '_seating_chart_' + stamp + '.pdf');
@@ -3598,7 +3678,7 @@ Object.assign(window, {
   openHelpModal, closeHelpModal,
   openSeatRosterModal, closeSeatRosterModal, generateSeatRosterReport, generateDeskLabels,
   openKeepAwayModal, closeKeepAwayModal, createKeepAwayGroup,
-  toggleStudentsPanel, openCopyLayoutModal, closeCopyLayoutModal, copyLayoutToClasses,
+  toggleStudentsPanel, rotateTeacherDesk, openCopyLayoutModal, closeCopyLayoutModal, copyLayoutToClasses,
   openNeedsModal, closeNeedsModal,
   addStudentManually, dropOnUnassigned, removeDesk, editCapacity, rotateDesk,
   toggleLock, cycleGender, renameStudent, removeStudent, unseatSlot, seatStudent, dropOnSeat
