@@ -744,6 +744,20 @@
     cursor:pointer;
   }
   .needsRow input{ width:18px; height:18px; margin:0; cursor:pointer; }
+
+  /* Right-hand Students panel — collapsed by default */
+  #sidebar{ transition:width .15s, padding .15s, opacity .1s; }
+  #sidebar.collapsed{
+    width:0; padding:14px 0; opacity:0; border-left:none;
+    overflow:hidden; pointer-events:none;
+  }
+  #studentsToggle{
+    font-size:13px; padding:7px 12px;
+    background:rgba(255,255,255,0.15);
+    border:1px solid rgba(255,255,255,0.4);
+  }
+  #studentsToggle:hover{ background:rgba(255,255,255,0.25); }
+  #studentsToggle.active{ background:rgba(255,255,255,0.3); }
 </style>
 </head>
 <body>
@@ -778,6 +792,7 @@
     <h1>Seating Chart Maker</h1>
   </div>
   <div class="header-right">
+    <button id="studentsToggle" onclick="toggleStudentsPanel()" title="Show/hide Unassigned Students">👥 Students <span id="unassignedCount"></span></button>
     <span id="user-badge"></span>
     <button id="signout-btn" onclick="doSignOut()">Sign Out</button>
     <div id="saveStatus">Ready</div>
@@ -815,12 +830,14 @@
     <span class="note">Saves tables <i>and</i> who sits where. Charts marked ⏱ were saved automatically before a layout change.</span>
   </div>
 
-  <div class="group" data-mode="layout">
-    <label>Saved Layout</label>
-    <select id="templateSelect"><option value="">-- choose template --</option></select>
-    <button onclick="applyTemplate()">Apply</button>
+  <div class="group" data-mode="always">
+    <label>Saved Layouts (all classes)</label>
+    <select id="templateSelect"><option value="">-- choose layout --</option></select>
+    <button onclick="applyTemplate()">Apply to This Class</button>
     <button class="secondary" onclick="saveAsTemplate()">Save Current As...</button>
     <button class="secondary" onclick="deleteTemplate()">Delete</button>
+    <button class="secondary" onclick="openCopyLayoutModal()">📋 Copy Tables to Other Classes...</button>
+    <span class="note">Layouts are tables only, shared by every class. Applying or copying clears seating in that class (rosters stay).</span>
   </div>
 
   <div class="group" data-mode="layout">
@@ -905,7 +922,7 @@
     <div id="room"></div>
   </div>
 
-  <div id="sidebar">
+  <div id="sidebar" class="collapsed">
     <h2>Unassigned Students</h2>
     <div id="addStudentRow">
       <div class="addStudentFields">
@@ -962,23 +979,23 @@
     <h3>Three views</h3>
     <ul>
       <li><b>Clean View</b> (the default, and what ✅ Done returns you to) — a tidy, read-only look at the chart.</li>
-      <li><b>📐 Edit Layout</b> — the table tools: Saved Layout, Quick Grid, Select Tables / Duplicate. Every table can be dragged, and each one shows a toolbar strip along its bottom.</li>
+      <li><b>📐 Edit Layout</b> — the table tools: Quick Grid, Select Tables / Duplicate. Every table can be dragged, and each one shows a toolbar strip along its bottom.</li>
       <li><b>🧑‍🤝‍🧑 Edit Students</b> — the student tools: Shuffle, Seating Rules, Kagan Group Import, and Roster. Tables stay put, each seat shows its own toolbar strip, and you can drag students from Unassigned onto open seats.</li>
     </ul>
-    <p>Saved Seating Charts, Seat Numbers, Export/Print PDF, Seat Roster Report, and this Cheat Sheet are available in every view.</p>
+    <p>Saved Seating Charts, Saved Layouts, Seat Numbers, Export/Print PDF, Seat Roster Report, and this Cheat Sheet are available in every view. The <b>👥 Students</b> button in the header opens and closes the Unassigned Students panel (it starts closed to give you more room); the number next to it is how many students are unassigned.</p>
 
     <h3>Saved Seating Charts</h3>
     <p>A saved chart is a snapshot of the whole room: the tables, who sits where, which seats are locked, and where the Teacher Desk is. Use it when you switch between arrangements — say, lab groups normally and rows for testing.</p>
     <ul>
       <li><b>💾 Save Current Chart...</b> asks for a name (like "Lab groups") and saves the room exactly as it is.</li>
       <li><b>Restore</b> puts the chosen chart back. Your current room is auto-saved first, so restoring never loses anything. Students added since the chart was saved land in Unassigned; students removed from the roster are skipped.</li>
-      <li><b>Automatic saves (⏱):</b> before Quick Grid, applying a Saved Layout, Clear Layout, or a Restore replaces your tables, the app saves the current chart for you. The 10 most recent automatic saves per class are kept.</li>
+      <li><b>Automatic saves (⏱):</b> before Quick Grid, applying a Saved Layout, Clear Layout, copying tables from another class, or a Restore replaces your tables, the app saves the current chart for you. The 10 most recent automatic saves per class are kept.</li>
       <li><b>Delete</b> removes a saved chart. It doesn't change the room you're looking at.</li>
     </ul>
     <div class="tip">
       <b>Switching to rows for a test:</b> 💾 save your groups chart (or just let the ⏱ auto-save catch it), build or apply your rows, and when testing is over, pick the groups chart and click <b>Restore</b>.
     </div>
-    <p><b>Saved Layout</b> (in Edit Layout mode) is different: it saves only the tables, so you can reuse the same arrangement in any class. Applying one clears that class's seating.</p>
+    <p><b>Saved Layouts</b> (available in every view) are different: they save only the tables and are shared by all your classes. <b>Apply to This Class</b> uses one here, and <b>📋 Copy Tables to Other Classes...</b> sends this class's tables straight to the Cores you check, in the exact same spots, so seat numbers and desk labels line up. Either one clears seating in the class it changes; rosters stay.</p>
 
     <h3>Adding students</h3>
     <ul>
@@ -1014,7 +1031,7 @@
       <li><b>Undo arrow</b> (right, filled and unlocked seats only) sends that student back to Unassigned — handy when drag-and-drop is fussy on a Chromebook touchscreen.</li>
       <li><b>🔓 Clear All Locks</b> unlocks every seat in the class without moving anyone.</li>
     </ul>
-    <p><b>Locked means locked.</b> A locked student never moves until you unlock them. Place Students, Fix Rule Breaks, and Clear Seats all skip them, and any layout change that would remove their seat (Quick Grid, applying a Saved Layout, Clear Layout, removing their table, or shrinking its seat count) is stopped with a message listing who's in the way. Restoring a saved chart asks you first, then unlocks them and uses that chart's seats and locks instead. Moving or rotating a table is fine — the student rides along with it.</p>
+    <p><b>Locked means locked.</b> A locked student never moves until you unlock them. Place Students, Fix Rule Breaks, and Clear Seats all skip them, and any layout change that would remove their seat (Quick Grid, applying a Saved Layout, Clear Layout, copying tables in from another class, removing their table, or shrinking its seat count) is stopped with a message listing who's in the way. Restoring a saved chart asks you first, then unlocks them and uses that chart's seats and locks instead. Moving or rotating a table is fine — the student rides along with it.</p>
     <div class="tip">
       <b>IEP / 504 seating:</b> check the student's need in 🎯 Front Row &amp; Near Teacher and let Place Students handle it, or put them in the exact seat they need and click 🔒. Everyone else fills in around them.
     </div>
@@ -1028,6 +1045,9 @@
       <li>While dragging, blue guide lines appear when edges or centers line up with another table, and the table snaps into place.</li>
       <li><b>Teacher Desk</b> box: drag it to where your desk really is. The Near teacher rule measures from it.</li>
     </ul>
+    <div class="tip">
+      <b>Same tables for every Core:</b> build the tables once in Core 1, click <b>📋 Copy Tables to Other Classes...</b>, check Cores 2–4, then switch to each Core and click <b>📌 Place Students</b>.
+    </div>
 
     <h3>Exporting</h3>
     <p><b>Export/Print PDF</b> lets you choose Landscape, Portrait, or Auto (whichever prints your tables biggest). The PDF is cropped to your tables and scaled to fill the page, with the class name, your teacher name, and the date and time at the top. Seats are shaded by gender (blue for boys, green for girls). Locks, ⚠️ warnings, Front/Near-teacher labels, toolbars, and the Teacher Desk box don't print. If <b>🔢 Seat Numbers</b> is on, the seat numbers print too.</p>
@@ -1052,6 +1072,20 @@
         <button class="secondary" onclick="generateDeskLabels()">🏷️ Desk Labels (Avery 58163)</button>
         <button onclick="generateSeatRosterReport()">📋 Table Report</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modalBg" id="copyLayoutModal">
+  <div class="modal" style="width:400px;">
+    <h3>Copy Tables to Other Classes</h3>
+    <p style="font-size:12px;color:var(--muted);margin:-6px 0 10px 0;line-height:1.4;">
+      Copies this class's tables and Teacher Desk spot to the classes you check, in the exact same positions. Their seating is cleared (rosters stay), and each one's current chart is auto-saved first.
+    </p>
+    <div id="copyLayoutClassList" style="display:flex;flex-direction:column;gap:6px;max-height:240px;overflow-y:auto;margin-bottom:14px;padding:8px;border:1px solid var(--border);border-radius:8px;"></div>
+    <div class="btnRow">
+      <button class="secondary" onclick="closeCopyLayoutModal()">Cancel</button>
+      <button onclick="copyLayoutToClasses()">Copy Tables</button>
     </div>
   </div>
 </div>
@@ -1353,6 +1387,14 @@ function applyStoredPanelState(){
   }
 }
 
+/* ====== STUDENTS PANEL TOGGLE ======
+   The right-hand Unassigned Students panel starts collapsed every time
+   the page loads, for more room to work. The 👥 Students button opens it. */
+function toggleStudentsPanel(){
+  const open = !document.getElementById('sidebar').classList.toggle('collapsed');
+  document.getElementById('studentsToggle').classList.toggle('active', open);
+}
+
 function setStatus(msg){
   document.getElementById('saveStatus').textContent = msg;
   setTimeout(()=>{ document.getElementById('saveStatus').textContent = "Ready"; }, 1500);
@@ -1404,6 +1446,7 @@ function selectClass(id){
     document.getElementById('roomTitle').textContent = "No class selected";
     document.getElementById('room').innerHTML = "";
     document.getElementById('unassignedList').innerHTML = "";
+    document.getElementById('unassignedCount').textContent = "";
     return;
   }
   db.ref(`${ROOT}/classes/${currentClassId}/name`).once('value').then(s=>{
@@ -2238,13 +2281,15 @@ function handleCSV(event){
   event.target.value = '';
 }
 
-/* ====== LAYOUT TEMPLATES ====== */
+/* ====== LAYOUT TEMPLATES ======
+   Saved Layouts live once per account (not per class), so every class
+   can use them. */
 function loadTemplateList(){
   db.ref(`${ROOT}/layoutTemplates`).on('value', snap=>{
     templates = snap.val() || {};
     const sel = document.getElementById('templateSelect');
     const prev = sel.value;
-    sel.innerHTML = '<option value="">-- choose template --</option>';
+    sel.innerHTML = '<option value="">-- choose layout --</option>';
     Object.entries(templates).forEach(([id,t])=>{
       const opt = document.createElement('option');
       opt.value = id;
@@ -2298,7 +2343,7 @@ function applyTemplate(){
 function saveAsTemplate(){
   if(!currentClassId){ alert('Select or create a class first.'); return; }
   if(Object.keys(layout).length === 0){ alert('No desks to save yet.'); return; }
-  const name = prompt('Name this layout (e.g. "Rows" or "Groups"):');
+  const name = prompt('Name this layout (e.g. "Rows" or "Groups"). Every class can use it:');
   if(!name) return;
   const id = slugId('tmpl');
   db.ref(`${ROOT}/layoutTemplates/${id}`).set({name, desks: layout});
@@ -2313,6 +2358,104 @@ function deleteTemplate(){
   if(!confirm(`Delete the saved layout "${tmpl.name}"? This can't be undone. (It won't affect any class currently using it.)`)) return;
   db.ref(`${ROOT}/layoutTemplates/${id}`).remove();
   setStatus('Layout deleted');
+}
+
+/* ====== COPY TABLES TO OTHER CLASSES ======
+   Copies this class's tables (and Teacher Desk spot) to the classes you
+   pick, in exactly the same positions, so Seat Numbers, the Seat Roster
+   Report, and Desk Labels line up across Cores. Each target's current
+   chart is auto-saved first; a class with locked students is skipped. */
+function openCopyLayoutModal(){
+  if(!currentClassId){ alert('Select a class first.'); return; }
+  if(Object.keys(layout).length === 0){ alert('This class has no tables yet, so there\'s nothing to copy.'); return; }
+  const list = document.getElementById('copyLayoutClassList');
+  list.innerHTML = '';
+  const entries = Object.entries(allClasses)
+    .filter(([id]) => id !== currentClassId)
+    .sort((a,b)=> a[1].name.localeCompare(b[1].name, undefined, {numeric:true, sensitivity:'base'}));
+  if(entries.length === 0){
+    list.innerHTML = '<div style="font-size:12px;color:var(--muted);">No other classes yet.</div>';
+  }
+  entries.forEach(([id, c])=>{
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = id;
+    cb.style.width = 'auto';
+    row.appendChild(cb);
+    row.appendChild(document.createTextNode(c.name));
+    list.appendChild(row);
+  });
+  document.getElementById('copyLayoutModal').classList.add('show');
+}
+
+function closeCopyLayoutModal(){
+  document.getElementById('copyLayoutModal').classList.remove('show');
+}
+
+async function copyLayoutToClasses(){
+  const ids = Array.from(document.querySelectorAll('#copyLayoutClassList input[type=checkbox]:checked')).map(cb=>cb.value);
+  if(ids.length === 0){ alert('Check at least one class.'); return; }
+  const names = ids.map(id => allClasses[id].name);
+  if(!confirm(`Copy these tables to ${names.join(', ')}?\n\nTheir current tables and seating will be replaced (each class's current chart is auto-saved first). Rosters aren't touched — students go to Unassigned, ready for 📌 Place Students.`)) return;
+
+  closeCopyLayoutModal();
+  setStatus('Copying tables...');
+  const srcLayout = JSON.parse(JSON.stringify(layout));
+  const srcTeacher = (roomMarkers && roomMarkers.teacher) || null;
+  const srcName = document.getElementById('roomTitle').textContent;
+  const stamp = new Date().toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' });
+  const read = path => db.ref(path).once('value').then(s => s.val() || {});
+  const copied = [], skipped = [];
+
+  try{
+    for(const cid of ids){
+      const [lay, seat, lk, rm, ros] = await Promise.all([
+        read(`${ROOT}/layouts/${cid}`), read(`${ROOT}/seating/${cid}`), read(`${ROOT}/locks/${cid}`),
+        read(`${ROOT}/roomMarkers/${cid}`), read(`${ROOT}/rosters/${cid}`)
+      ]);
+
+      // Locked means locked — skip any class with a locked student.
+      const lockedNames = [];
+      Object.entries(seat).forEach(([d, seats])=>{
+        Object.entries(seats || {}).forEach(([s, sid])=>{
+          if(sid && lk[d] && lk[d][s]) lockedNames.push(ros[sid] ? ros[sid].name : '(unknown student)');
+        });
+      });
+      if(lockedNames.length){
+        skipped.push(`${allClasses[cid].name} — locked: ${lockedNames.join(', ')}`);
+        continue;
+      }
+
+      if(Object.keys(lay).length){
+        await db.ref(`${ROOT}/savedCharts/${cid}/${slugId('chart')}`).set({
+          name: `Before copying tables from ${srcName} (${stamp})`,
+          savedAt: Date.now(), auto: true,
+          layout: lay, seating: seat, locks: lk, teacher: rm.teacher || null
+        });
+        await pruneAutoSaves(cid);
+      }
+
+      const updates = {};
+      updates[`${ROOT}/layouts/${cid}`] = srcLayout;
+      updates[`${ROOT}/seating/${cid}`] = null;
+      updates[`${ROOT}/locks/${cid}`] = null;
+      updates[`${ROOT}/roomMarkers/${cid}/teacher`] = srcTeacher;
+      await db.ref().update(updates);
+      copied.push(allClasses[cid].name);
+    }
+  } catch(err){
+    console.error('Copy tables failed:', err);
+    setStatus('Ready');
+    alert('Copying stopped partway: ' + err.message + (copied.length ? `\n\nAlready copied to: ${copied.join(', ')}` : ''));
+    return;
+  }
+
+  setStatus(copied.length ? `Tables copied to ${copied.length} class${copied.length>1?'es':''}` : 'Nothing copied');
+  if(skipped.length){
+    alert(`${copied.length ? `Copied to: ${copied.join(', ')}\n\n` : ''}Skipped because of locked seats:\n${skipped.join('\n')}\n\nUnlock those students (or use 🔓 Clear All Locks in that class), then copy again.`);
+  }
 }
 
 /* ====== GRID GENERATION ====== */
@@ -2999,6 +3142,7 @@ function render(){
   const unassigned = Object.entries(roster)
     .filter(([id])=>!seatedIds.has(id))
     .sort((a,b)=> a[1].name.localeCompare(b[1].name, undefined, {sensitivity:'base'}));
+  document.getElementById('unassignedCount').textContent = unassigned.length ? `(${unassigned.length})` : '';
   if(unassigned.length === 0){
     list.innerHTML = '<div id="emptyMsg">Everyone is seated 🎉</div>';
   }
@@ -3454,6 +3598,7 @@ Object.assign(window, {
   openHelpModal, closeHelpModal,
   openSeatRosterModal, closeSeatRosterModal, generateSeatRosterReport, generateDeskLabels,
   openKeepAwayModal, closeKeepAwayModal, createKeepAwayGroup,
+  toggleStudentsPanel, openCopyLayoutModal, closeCopyLayoutModal, copyLayoutToClasses,
   openNeedsModal, closeNeedsModal,
   addStudentManually, dropOnUnassigned, removeDesk, editCapacity, rotateDesk,
   toggleLock, cycleGender, renameStudent, removeStudent, unseatSlot, seatStudent, dropOnSeat
